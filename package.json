@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deepgram/sdk": "^3.0.0",
     "@tailwindcss/typography": "^0.5.10",
     "ai": "^2.2.37",
     "firebase": "^10.7.1",
