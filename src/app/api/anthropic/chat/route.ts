@@ -1,15 +1,25 @@
-import { anthropic } from "@ai-sdk/anthropic";
-import { convertToCoreMessages, streamText } from "ai";
+import OpenAI from 'openai';
+import { OpenAIStream, StreamingTextResponse } from 'ai';
 
 export const runtime = "edge";
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 export async function POST(req: Request) {
   const { messages } = await req.json();
-  const result = await streamText({
-    model: anthropic("claude-3-5-sonnet-20240620"),
-    messages: convertToCoreMessages(messages),
-    system: "You are a helpful AI assistant",
+  
+  // Используем OpenAI API вместо Anthropic
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    stream: true,
+    messages: messages,
   });
-
-  return result.toDataStreamResponse();
+  
+  // Создаем поток для ответа
+  const stream = OpenAIStream(response);
+  
+  // Возвращаем стриминг-ответ
+  return new StreamingTextResponse(stream);
 }
