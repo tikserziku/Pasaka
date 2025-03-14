@@ -35,4 +35,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Добавьте эти строки, если их еще нет
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
