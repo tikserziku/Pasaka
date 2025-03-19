@@ -9,22 +9,40 @@
   NODE_VERSION = "18.17.0"
   NPM_FLAGS = "--legacy-peer-deps"
   OPENAI_API_KEY = ""
-  REPLICATE_API_TOKEN = ""
+  REPLICATE_API_TOKEN = "r8_d8ipwoukb61wLY5VE0ftkCFsY4bRGGa05vpa2"
 
 [functions]
   node_bundler = "esbuild"
   external_node_modules = [
-    "module-one",
-    "module-two",
     "@deepgram/sdk",
     "openai"
   ]
   included_files = ["src/app/api/**"]
 
+# Исправленные перенаправления с более точным соответствием путей
 [[redirects]]
-  from = "/api/openai/*"
-  to = "/.netlify/functions/openai-api/:splat"
+  from = "/api/openai/chat"
+  to = "/.netlify/functions/openai-api"
   status = 200
+  force = true
+  [redirects.query]
+    path = "chat"
+
+[[redirects]]
+  from = "/api/openai/generate-image"
+  to = "/.netlify/functions/openai-api"
+  status = 200
+  force = true
+  [redirects.query]
+    path = "generate-image"
+
+[[redirects]]
+  from = "/api/openai/text-to-speech"
+  to = "/.netlify/functions/openai-api"
+  status = 200
+  force = true
+  [redirects.query]
+    path = "text-to-speech"
 
 [[redirects]]
   from = "/api/replicate/*"
