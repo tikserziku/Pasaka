@@ -8,16 +8,15 @@
 [build.environment]
   NODE_VERSION = "18.17.0"
   NPM_FLAGS = "--legacy-peer-deps"
+  OPENAI_API_KEY = ""
+  REPLICATE_API_TOKEN = ""
 
-# Настройка для функций Netlify, включая увеличенный таймаут
 [functions]
-  # Увеличиваем время выполнения до 30 секунд (максимум для функций Netlify)
   timeout = 30
   included_files = ["src/app/api/**"]
   node_bundler = "esbuild"
-  external_node_modules = ["@deepgram/sdk", "openai", "node-fetch"]
+  external_node_modules = ["@deepgram/sdk", "openai"]
 
-# Перенаправления для API
 [[redirects]]
   from = "/api/openai/*"
   to = "/.netlify/functions/openai-api/:splat"
@@ -28,7 +27,6 @@
   to = "/.netlify/functions/replicate-api/:splat"
   status = 200
 
-# Настройки кэширования для улучшения производительности
 [[headers]]
   for = "/_next/static/*"
   [headers.values]
