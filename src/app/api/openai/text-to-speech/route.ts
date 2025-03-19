@@ -12,16 +12,19 @@ type VoiceType = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 // Максимальная длина текста для API
 const MAX_TEXT_LENGTH = 4096;
 
-// Проверка валидности текста - ИСПРАВЛЕНО: теперь явно возвращает boolean
+// Проверка валидности текста
 function validateText(text: string): boolean {
   return Boolean(text && text.trim().length > 0);
 }
 
-// Проверка валидности голоса - ИСПРАВЛЕНО: теперь явно возвращает boolean
+// Проверка валидности голоса
 function validateVoice(voice: string): boolean {
   const validVoices: VoiceType[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
   return validVoices.includes(voice as VoiceType);
 }
+
+// Проверка, является ли среда Netlify
+const isNetlify = process.env.NETLIFY || process.env.NETLIFY_LOCAL;
 
 export async function POST(req: Request) {
   try {
@@ -35,7 +38,17 @@ export async function POST(req: Request) {
     }
 
     // Получаем данные запроса
-    const data = await req.json();
+    let data;
+    try {
+      data = await req.json();
+    } catch (error) {
+      console.error('Ошибка при разборе JSON запроса:', error);
+      return NextResponse.json(
+        { error: 'Некорректный формат запроса' },
+        { status: 400 }
+      );
+    }
+    
     const { text, voice = 'alloy' } = data;
 
     // Валидируем текст
@@ -69,19 +82,32 @@ export async function POST(req: Request) {
       speed: 1.0, // Стандартная скорость речи
     });
 
-    // Конвертируем в ArrayBuffer
-    const buffer = await mp3.arrayBuffer();
-
-    console.log(`Аудио успешно создано, размер: ${buffer.byteLength} байт`);
-
-    // Возвращаем как mp3 аудио
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'Content-Length': buffer.byteLength.toString(),
-        'Cache-Control': 'public, max-age=31536000', // Кэширование на год
-      },
-    });
+    // Для Netlify функций мы должны возвращать аудио как base64
+    if (isNetlify) {
+      const buffer = await mp3.arrayBuffer();
+      const base64Audio = Buffer.from(buffer).toString('base64');
+      
+      console.log(`Аудио успешно создано, размер: ${buffer.byteLength} байт`);
+      
+      return NextResponse.json({
+        audio: base64Audio,
+        format: 'mp3',
+        size: buffer.byteLength
+      });
+    } else {
+      // Для стандартной Next.js среды возвращаем аудио напрямую
+      const buffer = await mp3.arrayBuffer();
+      
+      console.log(`Аудио успешно создано, размер: ${buffer.byteLength} байт`);
+      
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': buffer.byteLength.toString(),
+          'Cache-Control': 'public, max-age=31536000', // Кэширование на год
+        },
+      });
+    }
   } catch (error: any) {
     console.error('Ошибка при создании аудио:', error);
     
