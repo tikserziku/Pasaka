@@ -31,3 +31,47 @@ body {
     text-wrap: balance;
   }
 }
+/* Добавьте эти стили в ваш globals.css или в компонент через inline-styles */
+
+/* Стили для всех полей ввода */
+input, select, textarea {
+  color: #333333 !important; /* Темный цвет текста */
+  background-color: #ffffff !important; /* Белый фон */
+  border: 1px solid #d1d5db !important; /* Серая рамка */
+}
+
+/* Стили для плейсхолдеров */
+input::placeholder, 
+select::placeholder, 
+textarea::placeholder {
+  color: #9ca3af !important; /* Серый цвет для плейсхолдера */
+  opacity: 1 !important; /* Полная непрозрачность */
+}
+
+/* Стили для фокуса */
+input:focus, 
+select:focus, 
+textarea:focus {
+  outline: none !important;
+  border-color: #8b5cf6 !important; /* Фиолетовая рамка при фокусе */
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important; /* Тень вокруг поля */
+}
+
+/* Стили для выпадающих списков */
+select {
+  appearance: auto !important; /* Включает стандартный вид выпадающего списка */
+  padding-right: 2rem !important; /* Отступ справа для стрелки */
+}
+
+/* Стили для темного режима, если используется */
+@media (prefers-color-scheme: dark) {
+  input, select, textarea {
+    color: #e5e7eb !important; /* Светлый цвет текста */
+    background-color: #374151 !important; /* Темный фон */
+    border-color: #4b5563 !important; /* Темно-серая рамка */
+  }
+  
+  input::placeholder, select::placeholder, textarea::placeholder {
+    color: #9ca3af !important; /* Серый плейсхолдер для темного режима */
+  }
+}
