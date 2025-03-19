@@ -72,16 +72,13 @@ export async function generateImage(params: ImageGenerationParams): Promise<stri
   try {
     // Определяем, работаем ли мы в среде Netlify
     const isNetlify = typeof window !== 'undefined' && window.location.hostname.includes('netlify.app');
-    const endpoint = isNetlify 
-      ? '/.netlify/functions/openai-api' 
-      : '/api/openai/chat';
     
     // Выбираем подходящий эндпоинт
-    const endpoint = isNetlify 
+    const apiEndpoint = isNetlify 
       ? '/.netlify/functions/openai-api/generate-image' 
       : API_CONFIG.openai.endpoints.generateImage;
     
-    const response = await fetchFromApi<ImageGenerationResponse>(endpoint, params);
+    const response = await fetchFromApi<ImageGenerationResponse>(apiEndpoint, params);
     
     if (!response.imageUrl) {
       throw new Error('No image URL in the response');
