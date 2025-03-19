@@ -12,15 +12,14 @@
   REPLICATE_API_TOKEN = ""
 
 [functions]
-
-  [functions.timeout]
+  node_bundler = "esbuild"
   external_node_modules = [
     "module-one",
-    "module-two"
+    "module-two",
+    "@deepgram/sdk",
+    "openai"
   ]
   included_files = ["src/app/api/**"]
-  node_bundler = "esbuild"
-  external_node_modules = ["@deepgram/sdk", "openai"]
 
 [[redirects]]
   from = "/api/openai/*"
