@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useChat } from 'ai/react';
-import { API_CONFIG, checkApiAvailability } from '@/lib/api/api-config';
 
 interface FairyTaleGeneratorProps {
   onTaleGenerated: (tale: string) => void;
@@ -26,50 +25,101 @@ const lengthOptions: {value: LengthType; label: string}[] = [
   { value: 'длинная', label: 'Длинная (7-10 минут чтения)' }
 ];
 
+// Функция для проверки доступности API
+const checkApiAvailability = async (apiPath: string): Promise<boolean> => {
+  try {
+    // Таймаут для запроса - 10 секунд
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(apiPath, {
+      method: 'HEAD',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (error) {
+    console.error(`Ошибка при проверке API ${apiPath}:`, error);
+    return false;
+  }
+};
+
 export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: FairyTaleGeneratorProps) {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState<string>('');
   const [theme, setTheme] = useState<ThemeType>('волшебная');
   const [length, setLength] = useState<LengthType>('короткая');
   const [error, setError] = useState<string | null>(null);
   const [apiAvailable, setApiAvailable] = useState<boolean>(true);
+  const [retryCount, setRetryCount] = useState<number>(0);
   
   // Проверяем доступность API при загрузке компонента
   useEffect(() => {
     const checkApi = async () => {
-      const isAvailable = await checkApiAvailability('openai');
+      const isAvailable = await checkApiAvailability('/api/openai/chat');
       setApiAvailable(isAvailable);
       
       if (!isAvailable) {
-        setError('API OpenAI недоступен. Возможно, не настроен API-ключ.');
+        setError('API OpenAI недоступен. Возможно, не настроен API-ключ или сервер перегружен. Пожалуйста, попробуйте позже.');
       }
     };
     
     checkApi();
   }, []);
 
-  // Используем API_CONFIG для настройки путей API
-  const { append, isLoading } = useChat({
-    api: API_CONFIG.openai.endpoints.chat, // Используем конфигурацию пути из api-config
+  // Используем ai/react для взаимодействия с чат-моделью
+  const { append, isLoading, messages } = useChat({
+    api: '/api/openai/chat',
     onFinish: (message) => {
       if (message.content.trim().length > 0) {
         onTaleGenerated(message.content);
+        // Сбрасываем счетчик повторных попыток при успехе
+        setRetryCount(0);
       } else {
         setError('Получена пустая сказка. Пожалуйста, попробуйте еще раз.');
       }
     },
     onError: (err) => {
       console.error('Ошибка при генерации сказки:', err);
+      
+      // Разные сообщения об ошибках в зависимости от причины
       if (err.message && err.message.includes('API key')) {
         setError('Ошибка API-ключа. Убедитесь, что OpenAI API ключ правильно настроен в окружении.');
+      } else if (err.message && err.message.includes('429')) {
+        setError('Превышен лимит запросов. Пожалуйста, подождите немного и попробуйте снова.');
+      } else if (err.message && err.message.includes('5')) {
+        // Ошибки 5xx указывают на проблемы на стороне сервера
+        setError('Проблемы с сервером OpenAI. Пожалуйста, попробуйте еще раз позже.');
       } else {
         setError('Произошла ошибка при создании сказки. Пожалуйста, попробуйте еще раз.');
       }
+      
+      // Увеличиваем счетчик попыток
+      setRetryCount(prev => prev + 1);
     }
   });
+  
+  // Автоматическая повторная попытка при ошибках сервера (не более 3 раз)
+  useEffect(() => {
+    if (error && error.includes('сервер') && retryCount < 3) {
+      const retryTimer = setTimeout(() => {
+        handleGenerateTale();
+      }, 3000 * retryCount); // Увеличиваем время ожидания с каждой повторной попыткой
+      
+      return () => clearTimeout(retryTimer);
+    }
+  }, [error, retryCount]);
 
   const handleGenerateTale = useCallback(async () => {
     setError(null);
     onGenerating();
+    
+    // Проверяем доступность API перед отправкой запроса
+    const isAvailable = await checkApiAvailability('/api/openai/chat');
+    if (!isAvailable) {
+      setError('API OpenAI недоступен. Пожалуйста, попробуйте позже.');
+      return;
+    }
     
     // Создаем системный промпт с детальными инструкциями для AI
     const systemPrompt = `Ты волшебный рассказчик сказок. Создай ${length} сказку на ${theme} тему${prompt ? ` о ${prompt}` : ''}. 
@@ -158,12 +208,19 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       {error && (
         <div className="mb-4 p-3 rounded-md bg-red-50 border-l-4 border-red-500 text-red-700">
           <p>{error}</p>
+          {retryCount > 0 && (
+            <p className="mt-2 text-sm">
+              {retryCount >= 3 ? 
+                'Достигнуто максимальное количество попыток. Попробуйте позже.' : 
+                `Повторных попыток: ${retryCount}/3`}
+            </p>
+          )}
         </div>
       )}
       
       <button
         onClick={handleGenerateTale}
-        disabled={isLoading}
+        disabled={isLoading || !apiAvailable}
         className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
                   disabled:bg-purple-300 transition-colors flex items-center justify-center"
       >
