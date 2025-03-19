@@ -12,12 +12,12 @@ type VoiceType = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 // Максимальная длина текста для API
 const MAX_TEXT_LENGTH = 4096;
 
-// Проверка валидности текста
+// Проверка валидности текста - ИСПРАВЛЕНО: теперь явно возвращает boolean
 function validateText(text: string): boolean {
-  return text && text.trim().length > 0;
+  return Boolean(text && text.trim().length > 0);
 }
 
-// Проверка валидности голоса
+// Проверка валидности голоса - ИСПРАВЛЕНО: теперь явно возвращает boolean
 function validateVoice(voice: string): boolean {
   const validVoices: VoiceType[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
   return validVoices.includes(voice as VoiceType);
