@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useChat } from 'ai/react';
+import { API_CONFIG, checkApiAvailability } from '@/lib/api/api-config';
 
 interface FairyTaleGeneratorProps {
   onTaleGenerated: (tale: string) => void;
@@ -30,9 +31,25 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   const [theme, setTheme] = useState<ThemeType>('волшебная');
   const [length, setLength] = useState<LengthType>('короткая');
   const [error, setError] = useState<string | null>(null);
+  const [apiAvailable, setApiAvailable] = useState<boolean>(true);
+  
+  // Проверяем доступность API при загрузке компонента
+  useEffect(() => {
+    const checkApi = async () => {
+      const isAvailable = await checkApiAvailability('openai');
+      setApiAvailable(isAvailable);
+      
+      if (!isAvailable) {
+        setError('API OpenAI недоступен. Возможно, не настроен API-ключ.');
+      }
+    };
+    
+    checkApi();
+  }, []);
 
+  // Используем API_CONFIG для настройки путей API
   const { append, isLoading } = useChat({
-    api: '/api/openai/chat',
+    api: API_CONFIG.openai.endpoints.chat, // Используем конфигурацию пути из api-config
     onFinish: (message) => {
       if (message.content.trim().length > 0) {
         onTaleGenerated(message.content);
@@ -42,7 +59,11 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
     },
     onError: (err) => {
       console.error('Ошибка при генерации сказки:', err);
-      setError('Произошла ошибка при создании сказки. Пожалуйста, попробуйте еще раз.');
+      if (err.message && err.message.includes('API key')) {
+        setError('Ошибка API-ключа. Убедитесь, что OpenAI API ключ правильно настроен в окружении.');
+      } else {
+        setError('Произошла ошибка при создании сказки. Пожалуйста, попробуйте еще раз.');
+      }
     }
   });
 
