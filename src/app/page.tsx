@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import FairyTaleGenerator from '@/components/FairyTaleGenerator';
-import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
 
 // Типы для управления приложением
 type AppState = 'initial' | 'generating-story' | 'generating-images' | 'generating-audio' | 'ready' | 'reading';
@@ -91,38 +89,46 @@ export default function Home() {
         `Детская книжная иллюстрация: ${character} ${lake ? 'возле волшебного озера, от которого исходит магическое сияние' : 'в кульминационный момент сказки'}. Финал сказки, яркие акварельные краски, стиль детских книг, волшебное свечение, красочная и детализированная иллюстрация.`
       ];
 
+      console.log('Начало генерации изображений с промптами:', prompts);
+
       const imageUrls: string[] = [];
       
-      // Генерируем изображения параллельно для ускорения
-      const imagePromises = prompts.map(prompt => 
-        fetch('/api/openai/generate-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
-        })
-        .then(response => {
+      // Генерируем изображения последовательно для снижения нагрузки
+      for (const prompt of prompts) {
+        try {
+          console.log('Отправка запроса на генерацию изображения с промптом:', prompt);
+          
+          const response = await fetch('/api/openai/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt }),
+          });
+          
+          console.log('Получен ответ с кодом:', response.status);
+          
           if (!response.ok) {
-            throw new Error(`Ошибка генерации изображения: ${response.status}`);
+            throw new Error(`Ошибка запроса: ${response.status} ${response.statusText}`);
           }
-          return response.json();
-        })
-        .then(data => data.imageUrl)
-      );
-
-      // Ждем завершения всех запросов
-      const results = await Promise.allSettled(imagePromises);
-      
-      // Собираем успешные URL
-      results.forEach(result => {
-        if (result.status === 'fulfilled') {
-          imageUrls.push(result.value);
+          
+          const data = await response.json();
+          console.log('Получены данные ответа:', data);
+          
+          if (data.imageUrl) {
+            console.log('Получен URL изображения:', data.imageUrl);
+            imageUrls.push(data.imageUrl);
+          } else {
+            console.error('Отсутствует URL изображения в ответе:', data);
+          }
+        } catch (err) {
+          console.error('Ошибка при обработке отдельного запроса:', err);
         }
-      });
+      }
 
       if (imageUrls.length === 0) {
         throw new Error('Не удалось сгенерировать ни одного изображения');
       }
 
+      console.log('Завершена генерация изображений, получено URL:', imageUrls);
       setImages(imageUrls);
       setImagesStatus('success');
       
@@ -145,6 +151,8 @@ export default function Home() {
   const generateAudioFromStory = async (storyText: string) => {
     setAudioStatus('loading');
     try {
+      console.log('Начало генерации аудио из текста длиной:', storyText.length);
+      
       // Ограничиваем длину текста для API
       const maxLength = 4000;
       const truncatedText = storyText.length > maxLength 
@@ -160,12 +168,22 @@ export default function Home() {
         }),
       });
 
+      console.log('Получен ответ от API text-to-speech с кодом:', response.status);
+      
       if (!response.ok) {
         throw new Error(`Ошибка при создании аудио: ${response.status}`);
       }
 
       const audioBlob = await response.blob();
+      console.log('Получен аудио-блоб размером:', audioBlob.size);
+      
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      
       const url = URL.createObjectURL(audioBlob);
+      console.log('Создан URL объекта из аудио-блоба:', url);
+      
       setAudioUrl(url);
       setAudioStatus('success');
       setAppState('ready');
@@ -179,8 +197,12 @@ export default function Home() {
   
   // Запуск режима чтения
   const startReadingMode = useCallback(() => {
-    if (!audioRef.current || !audioUrl) return;
+    if (!audioRef.current || !audioUrl) {
+      console.error('Невозможно запустить режим чтения: аудио не готово');
+      return;
+    }
     
+    console.log('Запуск режима чтения');
     setAppState('reading');
     setCurrentSubtitleIndex(0);
     
@@ -192,6 +214,13 @@ export default function Home() {
     const totalWords = subtitles.reduce((acc, subtitle) => acc + subtitle.split(' ').length, 0);
     const audioDuration = audioRef.current.duration || (totalWords * 250 / 1000);
     const avgTimePerSubtitle = audioDuration * 1000 / subtitles.length;
+    
+    console.log('Параметры чтения:', {
+      'Всего субтитров': subtitles.length,
+      'Всего слов': totalWords,
+      'Длительность аудио': audioDuration,
+      'Среднее время на субтитр': avgTimePerSubtitle
+    });
     
     // Настраиваем таймеры для каждого субтитра
     subtitles.forEach((_, index) => {
@@ -205,11 +234,15 @@ export default function Home() {
     });
     
     // Запускаем аудио
-    audioRef.current.play();
+    audioRef.current.play().catch(err => {
+      console.error('Ошибка воспроизведения аудио:', err);
+      alert('Не удалось запустить воспроизведение аудио. Попробуйте нажать на кнопку воспроизведения вручную.');
+    });
   }, [audioUrl, subtitles]);
   
   // Обработка завершения аудио
   const handleAudioEnded = useCallback(() => {
+    console.log('Аудио завершило воспроизведение');
     setAppState('ready');
     subtitleTimers.current.forEach(timer => clearTimeout(timer));
   }, []);
@@ -227,6 +260,7 @@ export default function Home() {
     setImagesStatus('idle');
     setAudioStatus('idle');
     subtitleTimers.current.forEach(timer => clearTimeout(timer));
+    console.log('Приложение сброшено');
   }, [audioUrl]);
   
   return (
@@ -263,36 +297,26 @@ export default function Home() {
             </button>
             
             <div className="relative flex-grow">
-              <AnimatePresence mode="wait">
-                {images.length > 0 && (
-                  <motion.div
-                    key={currentImageIndex}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 1 }}
-                    className="absolute inset-0"
-                  >
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={images[currentImageIndex]}
-                        alt={`Иллюстрация ${currentImageIndex + 1}`}
-                        layout="fill"
-                        objectFit="contain"
-                        priority
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {images.length > 0 && (
+                <div className="absolute inset-0">
+                  {/* Используем обычный img для максимальной совместимости */}
+                  <img
+                    src={images[currentImageIndex]}
+                    alt={`Иллюстрация ${currentImageIndex + 1}`}
+                    className="w-full h-full object-contain"
+                    style={{ 
+                      display: 'block',
+                      objectFit: 'contain',
+                      width: '100%',
+                      height: '100%'
+                    }}
+                  />
+                </div>
+              )}
               
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="absolute bottom-20 left-0 right-0 mx-4 bg-black bg-opacity-60 p-4 text-white text-center text-xl rounded-lg"
-              >
+              <div className="absolute bottom-20 left-0 right-0 mx-4 bg-black bg-opacity-60 p-4 text-white text-center text-xl rounded-lg">
                 {subtitles[currentSubtitleIndex]}
-              </motion.div>
+              </div>
             </div>
           </div>
         ) : (
@@ -300,10 +324,10 @@ export default function Home() {
             {/* Показываем сгенерированную сказку */}
             {story && (
               <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">Ваша сказка</h2>
+                <h2 className="text-2xl font-bold mb-4 text-gray-800">Ваша сказка</h2>
                 <div className="prose max-w-full">
                   {story.split('\n').map((paragraph, index) => (
-                    paragraph.trim() ? <p key={index} className="mb-4">{paragraph}</p> : null
+                    paragraph.trim() ? <p key={index} className="mb-4 text-gray-800">{paragraph}</p> : null
                   ))}
                 </div>
               </div>
@@ -311,7 +335,7 @@ export default function Home() {
             
             {/* Блок с иллюстрациями */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4">Иллюстрации к сказке</h2>
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Иллюстрации к сказке</h2>
               
               {imagesStatus === 'loading' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -319,7 +343,7 @@ export default function Home() {
                     <div key={i} className="border rounded-lg p-8 flex items-center justify-center bg-gray-100 h-64">
                       <div className="animate-pulse flex flex-col items-center">
                         <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
-                        <div className="text-xl">Генерация...</div>
+                        <div className="text-xl text-gray-500">Генерация...</div>
                       </div>
                     </div>
                   ))}
@@ -330,12 +354,41 @@ export default function Home() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {images.map((imageUrl, index) => (
                     <div key={index} className="border rounded-lg overflow-hidden shadow-md h-64 relative">
-                      <Image 
+                      {/* Используем обычный img вместо Next.js Image для отладки */}
+                      <img 
                         src={imageUrl} 
                         alt={`Иллюстрация ${index + 1} к сказке`}
-                        layout="fill"
-                        objectFit="cover"
+                        className="w-full h-full object-cover"
+                        style={{ 
+                          display: 'block', // Гарантируем отображение
+                          objectFit: 'cover',
+                          width: '100%',
+                          height: '100%'
+                        }}
+                        onError={(e) => {
+                          console.error(`Ошибка загрузки изображения ${index + 1}:`, e);
+                          // Устанавливаем запасное изображение при ошибке
+                          e.currentTarget.src = 'https://placehold.co/600x400/EEE/999?text=Ошибка+загрузки';
+                        }}
                       />
+                      {/* Отображаем URL изображения для отладки */}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 break-all">
+                        {typeof imageUrl === 'string' && imageUrl.substring(0, 30)}...
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Добавляем отладочную информацию */}
+              {images.length > 0 && (
+                <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+                  <p className="font-bold">Отладочная информация:</p>
+                  <p>Количество изображений: {images.length}</p>
+                  <p>Статус загрузки: {imagesStatus}</p>
+                  {images.map((url, i) => (
+                    <div key={i} className="mt-1">
+                      <span className="font-semibold">URL {i+1}:</span> {typeof url === 'string' ? url.substring(0, 50) : 'не строка'}...
                     </div>
                   ))}
                 </div>
@@ -343,8 +396,14 @@ export default function Home() {
               
               {imagesStatus === 'error' && (
                 <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
-                  <p className="font-medium">Не удалось создать все иллюстрации</p>
+                  <p className="font-medium">Не удалось загрузить изображения</p>
                   {error && <p className="mt-1">{error}</p>}
+                  <button 
+                    className="mt-2 bg-red-100 text-red-800 px-3 py-1 rounded"
+                    onClick={() => generateImagesFromStory(story)}
+                  >
+                    Попробовать снова
+                  </button>
                 </div>
               )}
               
@@ -355,26 +414,64 @@ export default function Home() {
             
             {/* Блок с аудио */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4">Озвучивание сказки</h2>
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Озвучивание сказки</h2>
               
               {audioStatus === 'loading' && (
                 <div className="border rounded-lg p-8 flex items-center justify-center bg-gray-100">
                   <div className="animate-pulse flex flex-col items-center">
                     <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
-                    <div className="text-xl">Создание аудио...</div>
+                    <div className="text-xl text-gray-500">Создание аудио...</div>
                   </div>
                 </div>
               )}
               
               {audioStatus === 'success' && audioUrl && (
                 <div>
-                  <audio 
-                    ref={audioRef}
-                    src={audioUrl}
-                    onEnded={handleAudioEnded}
-                    className="w-full mb-4"
-                    controls
-                  />
+                  {/* Обычный HTML5 аудиоплеер с явными стилями */}
+                  <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
+                    <audio 
+                      ref={audioRef}
+                      src={audioUrl}
+                      controls
+                      onEnded={handleAudioEnded}
+                      className="w-full"
+                      style={{ 
+                        display: 'block',
+                        width: '100%',
+                        minHeight: '40px',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '0.375rem'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Альтернативный плеер для отладки */}
+                  <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
+                    <p className="text-gray-700 mb-2">Если аудиоплеер не виден, используйте эти кнопки:</p>
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => {
+                          if (audioRef.current) {
+                            audioRef.current.play();
+                          }
+                        }}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                      >
+                        Играть
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          if (audioRef.current) {
+                            audioRef.current.pause();
+                          }
+                        }}
+                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded ml-2"
+                      >
+                        Пауза
+                      </button>
+                    </div>
+                  </div>
                   
                   <button
                     onClick={startReadingMode}
@@ -390,6 +487,14 @@ export default function Home() {
                 <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
                   <p className="font-medium">Не удалось создать аудио</p>
                   {error && <p className="mt-1">{error}</p>}
+                  <div className="mt-3">
+                    <button 
+                      onClick={() => generateAudioFromStory(story)}
+                      className="bg-red-100 text-red-800 px-3 py-1 rounded"
+                    >
+                      Попробовать снова
+                    </button>
+                  </div>
                 </div>
               )}
               
