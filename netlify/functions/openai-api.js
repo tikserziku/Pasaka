@@ -4,13 +4,13 @@ const { OpenAI } = require('openai');
 // Настройки для разных типов запросов OpenAI
 const OPENAI_CONFIGS = {
   chat: {
-    model: 'gpt-3.5-turbo', // Используем более быструю модель для уменьшения времени ответа
+    model: 'gpt-3.5-turbo',
     temperature: 0.8,
-    max_tokens: 1500, // Ограничиваем количество токенов
-    timeout: 25000 // Таймаут в 25 секунд для OpenAI
+    max_tokens: 1500,
+    timeout: 25000
   },
   imageGeneration: {
-    model: 'dall-e-2', // Используем DALL-E 2 вместо DALL-E 3, он быстрее
+    model: 'dall-e-3', // Переключаемся на DALL-E 3 для лучшего качества
     size: '1024x1024',
     quality: 'standard',
     style: 'vivid'
@@ -49,15 +49,15 @@ exports.handler = async function(event, context) {
   // Инициализируем OpenAI клиент с таймаутом
   const openai = new OpenAI({ 
     apiKey,
-    maxRetries: 1, // Уменьшаем количество повторных попыток
-    timeout: 25000 // Устанавливаем таймаут в 25 секунд
+    maxRetries: 2, // Увеличиваем количество повторных попыток
+    timeout: 30000 // Увеличиваем таймаут до 30 секунд
   });
   
   try {
-    // Парсим путь запроса, чтобы определить тип операции
+    // Определяем тип операции из пути
     const pathParts = event.path.split('/');
-    const path = pathParts[pathParts.length - 1];
-    console.log('Тип операции:', path);
+    const operation = pathParts[pathParts.length - 1];
+    console.log('Тип операции:', operation);
     
     let requestBody;
     try {
@@ -72,19 +72,21 @@ exports.handler = async function(event, context) {
     }
     
     // Обрабатываем разные типы запросов
-    console.log('Начинаем обработку запроса типа:', path);
-    switch (path) {
-      case 'chat':
-        return await handleChatRequest(openai, requestBody);
-      case 'generate-image':
-        return await handleImageRequest(openai, requestBody);
-      case 'text-to-speech':
-        return await handleTextToSpeechRequest(openai, requestBody);
-      default:
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ error: 'Unknown API endpoint' })
-        };
+    console.log('Начинаем обработку запроса типа:', operation);
+    
+    // Используем switch с проверкой включения операции в путь
+    // для большей гибкости
+    if (event.path.includes('/chat')) {
+      return await handleChatRequest(openai, requestBody);
+    } else if (event.path.includes('/generate-image')) {
+      return await handleImageRequest(openai, requestBody);
+    } else if (event.path.includes('/text-to-speech')) {
+      return await handleTextToSpeechRequest(openai, requestBody);
+    } else {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Unknown API endpoint' })
+      };
     }
   } catch (error) {
     console.error('Ошибка при обработке запроса:', error);
@@ -146,7 +148,7 @@ async function handleChatRequest(openai, requestBody) {
 // Обработчик для запросов генерации изображений
 async function handleImageRequest(openai, requestBody) {
   console.log('Обработка запроса генерации изображения...');
-  const { prompt, size, quality, style } = requestBody;
+  const { prompt } = requestBody;
   
   if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
     console.error('Некорректный промпт');
@@ -165,9 +167,9 @@ async function handleImageRequest(openai, requestBody) {
       model: config.model,
       prompt: prompt,
       n: 1,
-      size: size || config.size,
-      quality: quality || config.quality,
-      style: style || config.style
+      size: requestBody.size || config.size,
+      quality: requestBody.quality || config.quality,
+      style: requestBody.style || config.style
     });
     
     const endTime = Date.now();
@@ -179,6 +181,27 @@ async function handleImageRequest(openai, requestBody) {
     };
   } catch (error) {
     console.error('Ошибка при генерации изображения:', error);
+    
+    // Если не удалось использовать DALL-E 3, попробуем DALL-E 2
+    if (OPENAI_CONFIGS.imageGeneration.model === 'dall-e-3') {
+      try {
+        console.log('Повторная попытка с использованием DALL-E 2...');
+        const fallbackResponse = await openai.images.generate({
+          model: 'dall-e-2',
+          prompt: prompt,
+          n: 1,
+          size: '1024x1024'
+        });
+        
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ imageUrl: fallbackResponse.data[0]?.url })
+        };
+      } catch (fallbackError) {
+        console.error('Ошибка при резервной генерации изображения:', fallbackError);
+      }
+    }
+    
     return {
       statusCode: error.status || 500,
       body: JSON.stringify({
@@ -206,11 +229,17 @@ async function handleTextToSpeechRequest(openai, requestBody) {
     console.log('Отправка запроса text-to-speech к OpenAI API...');
     const startTime = Date.now();
     
+    // Ограничение длины текста для API
+    const maxLength = 4000;
+    const truncatedText = text.length > maxLength 
+      ? text.substring(0, maxLength) + "... (текст был сокращен для озвучивания)"
+      : text;
+    
     const config = OPENAI_CONFIGS.textToSpeech;
     const mp3 = await openai.audio.speech.create({
       model: config.model,
       voice: voice || config.voice,
-      input: text
+      input: truncatedText
     });
     
     const endTime = Date.now();
