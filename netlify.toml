@@ -7,4 +7,33 @@
 
 [build.environment]
   NODE_VERSION = "18.17.0"
-  NPM_FLAGS = "--legacy-peer-deps" 
+  NPM_FLAGS = "--legacy-peer-deps"
+
+# Настройка для API маршрутов
+[functions]
+  # Увеличиваем время выполнения (важно для генерации изображений и аудио)
+  included_files = ["src/app/api/**"]
+  node_bundler = "esbuild"
+  external_node_modules = ["@deepgram/sdk", "openai"]
+
+# Перенаправления для API
+[[redirects]]
+  from = "/api/openai/*"
+  to = "/.netlify/functions/openai-api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/replicate/*"
+  to = "/.netlify/functions/replicate-api/:splat"
+  status = 200
+
+# Настройки кэширования для улучшения производительности
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
