@@ -72,6 +72,9 @@ export async function generateImage(params: ImageGenerationParams): Promise<stri
   try {
     // Определяем, работаем ли мы в среде Netlify
     const isNetlify = typeof window !== 'undefined' && window.location.hostname.includes('netlify.app');
+    const endpoint = isNetlify 
+      ? '/.netlify/functions/openai-api' 
+      : '/api/openai/chat';
     
     // Выбираем подходящий эндпоинт
     const endpoint = isNetlify 
