@@ -1,103 +1,96 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-export async function POST(request) {
+// Инициализируем API-клиент OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Валидация промпта
+function validatePrompt(prompt: string): boolean {
+  return prompt && prompt.trim().length > 0 && prompt.length < 4000;
+}
+
+// Настройки для генерации изображений
+const DEFAULT_SIZE = "1024x1024";
+const DEFAULT_QUALITY = "standard";
+const DEFAULT_STYLE = "vivid";
+
+export async function POST(req: Request) {
   try {
-    // Log the start of the request
-    console.log('Starting image generation request');
-    
-    // Get API key from environment variables
-    const apiKey = process.env.OPENAI_API_KEY;
-    
-    if (!apiKey) {
-      console.error('OPENAI_API_KEY not found in environment variables');
+    // Проверяем наличие API-ключа
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OPENAI_API_KEY не найден в переменных окружения');
       return NextResponse.json(
-        { error: 'API configuration error: missing API key' },
+        { error: 'Ошибка конфигурации API: отсутствует API-ключ' },
         { status: 500 }
       );
     }
+
+    // Получаем данные запроса
+    const data = await req.json();
+    const { prompt, size = DEFAULT_SIZE, style = DEFAULT_STYLE, quality = DEFAULT_QUALITY } = data;
+
+    // Валидируем промпт
+    if (!validatePrompt(prompt)) {
+      return NextResponse.json(
+        { error: 'Запрос для генерации изображения некорректен или отсутствует' },
+        { status: 400 }
+      );
+    }
+
+    console.log("Запрос на генерацию изображения:", prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''));
+
+    // Улучшаем промпт для детских иллюстраций, если это еще не сделано
+    const enhancedPrompt = prompt.toLowerCase().includes('детск') || prompt.toLowerCase().includes('книж')
+      ? prompt
+      : `${prompt} Иллюстрация в стиле детских книг, высокое качество, акварельная техника, яркие чистые цвета, четкие детали, профессиональная художественная детализация. БЕЗ ТЕКСТА НА ИЗОБРАЖЕНИИ.`;
     
-    console.log('API key found, initializing OpenAI client');
-    
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: apiKey,
+    // Используем OpenAI DALL-E для генерации изображений
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: enhancedPrompt,
+      n: 1,
+      size: size as "1024x1024" | "1792x1024" | "1024x1792",
+      quality: quality as "standard" | "hd",
+      style: style as "vivid" | "natural",
     });
-    
-    // Parse request body
-    let body;
-    try {
-      body = await request.json();
-    } catch (parseError) {
-      console.error('Failed to parse request body:', parseError);
-      return NextResponse.json(
-        { error: 'Invalid request format' },
-        { status: 400 }
-      );
+
+    const imageUrl = response.data[0]?.url;
+
+    if (!imageUrl) {
+      throw new Error('Не удалось получить URL изображения');
     }
+
+    console.log("OpenAI успешно сгенерировал изображение");
+
+    return NextResponse.json({ imageUrl });
+  } catch (error: any) {
+    // Подробный вывод ошибки
+    console.error('Ошибка при генерации изображения:', error);
     
-    const { prompt } = body;
-    
-    if (!prompt) {
-      console.error('Missing prompt in request');
-      return NextResponse.json(
-        { error: 'Missing prompt in request' },
-        { status: 400 }
-      );
-    }
-    
-    console.log('Sending request to OpenAI with prompt:', prompt.substring(0, 50) + '...');
-    
-    try {
-      // Generate image
-      const response = await openai.images.generate({
-        model: "dall-e-3",
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-      });
-      
-      console.log('Received response from OpenAI:', JSON.stringify(response).substring(0, 100) + '...');
-      
-      if (!response.data || !response.data[0] || !response.data[0].url) {
-        console.error('Invalid response from OpenAI:', JSON.stringify(response));
-        return NextResponse.json(
-          { error: 'Invalid API response' },
-          { status: 500 }
-        );
-      }
-      
-      console.log('Successfully generated image URL');
-      return NextResponse.json({ imageUrl: response.data[0].url });
-    } catch (apiError) {
-      console.error('OpenAI API error:', apiError);
-      
-      // Extract detailed error information
-      const errorDetails = {
-        message: apiError.message,
-        status: apiError.status,
-        type: apiError.type,
-        code: apiError.code
-      };
-      
-      console.error('Error details:', JSON.stringify(errorDetails));
+    // Определяем тип ошибки и формируем соответствующий ответ
+    if (error.response) {
+      // Ошибка API OpenAI
+      const statusCode = error.response.status || 500;
+      const errorMessage = error.response.data?.error?.message || error.message;
       
       return NextResponse.json(
         { 
-          error: 'OpenAI API error', 
-          details: errorDetails
+          error: 'Ошибка API OpenAI', 
+          details: errorMessage
         },
-        { status: apiError.status || 500 }
+        { status: statusCode }
+      );
+    } else {
+      // Другие ошибки
+      return NextResponse.json(
+        { 
+          error: 'Не удалось сгенерировать изображение', 
+          details: error.message || 'Неизвестная ошибка'
+        },
+        { status: 500 }
       );
     }
-  } catch (error) {
-    console.error('Unhandled error in image generation:', error);
-    return NextResponse.json(
-      { 
-        error: 'Failed to generate image', 
-        details: error.message
-      },
-      { status: 500 }
-    );
   }
 }
