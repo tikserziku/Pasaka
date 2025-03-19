@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import FairyTaleGenerator from '@/components/FairyTaleGenerator';
+import Image from 'next/image';
 
 // Типы для управления приложением
 type AppState = 'initial' | 'generating-story' | 'generating-images' | 'generating-audio' | 'ready' | 'reading';
@@ -54,23 +55,7 @@ export default function Home() {
     };
   }, [appState, images]);
   
-  // Генерация сказки
-  const handleTaleGenerated = useCallback(async (tale: string) => {
-    setStory(tale);
-    setAppState('generating-images');
-    
-    // Разбиваем сказку на предложения для субтитров
-    const sentences = tale
-      .replace(/([.!?])\s+/g, "$1|")
-      .split("|")
-      .filter(s => s.trim().length > 0);
-    setSubtitles(sentences);
-    
-    // Генерируем иллюстрации
-    await generateImagesFromStory(tale);
-  }, []);
-  
-  // Генерация изображений
+  // Генерация изображений на основе сказки
   const generateImagesFromStory = async (storyText: string) => {
     setImagesStatus('loading');
     try {
@@ -146,6 +131,22 @@ export default function Home() {
       await generateAudioFromStory(storyText);
     }
   };
+  
+  // Генерация сказки
+  const handleTaleGenerated = useCallback(async (tale: string) => {
+    setStory(tale);
+    setAppState('generating-images');
+    
+    // Разбиваем сказку на предложения для субтитров
+    const sentences = tale
+      .replace(/([.!?])\s+/g, "$1|")
+      .split("|")
+      .filter(s => s.trim().length > 0);
+    setSubtitles(sentences);
+    
+    // Генерируем иллюстрации
+    await generateImagesFromStory(tale);
+  }, []);
   
   // Генерация аудио
   const generateAudioFromStory = async (storyText: string) => {
@@ -299,18 +300,16 @@ export default function Home() {
             <div className="relative flex-grow">
               {images.length > 0 && (
                 <div className="absolute inset-0">
-                  {/* Используем обычный img для максимальной совместимости */}
-                  <img
-                    src={images[currentImageIndex]}
-                    alt={`Иллюстрация ${currentImageIndex + 1}`}
-                    className="w-full h-full object-contain"
-                    style={{ 
-                      display: 'block',
-                      objectFit: 'contain',
-                      width: '100%',
-                      height: '100%'
-                    }}
-                  />
+                  <div className="relative w-full h-full">
+                    <Image
+                      src={images[currentImageIndex]}
+                      alt={`Иллюстрация ${currentImageIndex + 1}`}
+                      fill
+                      style={{ objectFit: 'contain' }}
+                      unoptimized
+                      priority
+                    />
+                  </div>
                 </div>
               )}
               
@@ -354,41 +353,18 @@ export default function Home() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {images.map((imageUrl, index) => (
                     <div key={index} className="border rounded-lg overflow-hidden shadow-md h-64 relative">
-                      {/* Используем обычный img вместо Next.js Image для отладки */}
-                      <img 
-                        src={imageUrl} 
-                        alt={`Иллюстрация ${index + 1} к сказке`}
-                        className="w-full h-full object-cover"
-                        style={{ 
-                          display: 'block', // Гарантируем отображение
-                          objectFit: 'cover',
-                          width: '100%',
-                          height: '100%'
-                        }}
-                        onError={(e) => {
-                          console.error(`Ошибка загрузки изображения ${index + 1}:`, e);
-                          // Устанавливаем запасное изображение при ошибке
-                          e.currentTarget.src = 'https://placehold.co/600x400/EEE/999?text=Ошибка+загрузки';
-                        }}
-                      />
-                      {/* Отображаем URL изображения для отладки */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 break-all">
-                        {typeof imageUrl === 'string' && imageUrl.substring(0, 30)}...
+                      <div className="relative w-full h-full">
+                        <Image 
+                          src={imageUrl} 
+                          alt={`Иллюстрация ${index + 1} к сказке`}
+                          fill
+                          style={{ objectFit: 'cover' }}
+                          unoptimized
+                          onError={() => {
+                            console.error(`Ошибка загрузки изображения ${index + 1}`);
+                          }}
+                        />
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {/* Добавляем отладочную информацию */}
-              {images.length > 0 && (
-                <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
-                  <p className="font-bold">Отладочная информация:</p>
-                  <p>Количество изображений: {images.length}</p>
-                  <p>Статус загрузки: {imagesStatus}</p>
-                  {images.map((url, i) => (
-                    <div key={i} className="mt-1">
-                      <span className="font-semibold">URL {i+1}:</span> {typeof url === 'string' ? url.substring(0, 50) : 'не строка'}...
                     </div>
                   ))}
                 </div>
