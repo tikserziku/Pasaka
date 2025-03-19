@@ -9,12 +9,13 @@
   NODE_VERSION = "18.17.0"
   NPM_FLAGS = "--legacy-peer-deps"
 
-# Настройка для API маршрутов
+# Настройка для функций Netlify, включая увеличенный таймаут
 [functions]
-  # Увеличиваем время выполнения (важно для генерации изображений и аудио)
+  # Увеличиваем время выполнения до 30 секунд (максимум для функций Netlify)
+  timeout = 30
   included_files = ["src/app/api/**"]
   node_bundler = "esbuild"
-  external_node_modules = ["@deepgram/sdk", "openai"]
+  external_node_modules = ["@deepgram/sdk", "openai", "node-fetch"]
 
 # Перенаправления для API
 [[redirects]]
