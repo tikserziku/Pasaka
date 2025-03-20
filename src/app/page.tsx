@@ -56,7 +56,7 @@ export default function Home() {
   }, [appState, images]);
   
   // Генерация изображений на основе сказки
-  const generateImagesFromStory = async (storyText: string) => {
+  const generateImagesFromStory = useCallback(async (storyText: string) => {
     setImagesStatus('loading');
     try {
       // Анализируем текст для создания более точных промптов
@@ -130,26 +130,10 @@ export default function Home() {
       setAppState('generating-audio');
       await generateAudioFromStory(storyText);
     }
-  };
-  
-  // Генерация сказки
-  const handleTaleGenerated = useCallback(async (tale: string) => {
-    setStory(tale);
-    setAppState('generating-images');
-    
-    // Разбиваем сказку на предложения для субтитров
-    const sentences = tale
-      .replace(/([.!?])\s+/g, "$1|")
-      .split("|")
-      .filter(s => s.trim().length > 0);
-    setSubtitles(sentences);
-    
-    // Генерируем иллюстрации
-    await generateImagesFromStory(tale);
   }, []);
   
-  // Генерация аудио
-  const generateAudioFromStory = async (storyText: string) => {
+  // Генерация аудио из текста
+  const generateAudioFromStory = useCallback(async (storyText: string) => {
     setAudioStatus('loading');
     try {
       console.log('Начало генерации аудио из текста длиной:', storyText.length);
@@ -194,7 +178,23 @@ export default function Home() {
       setError(err instanceof Error ? err.message : 'Неизвестная ошибка при создании аудио');
       setAppState('ready'); // Переходим в готовое состояние, даже если есть ошибки
     }
-  };
+  }, [audioUrl]);
+  
+  // Генерация сказки - обработчик для FairyTaleGenerator
+  const handleTaleGenerated = useCallback(async (tale: string) => {
+    setStory(tale);
+    setAppState('generating-images');
+    
+    // Разбиваем сказку на предложения для субтитров
+    const sentences = tale
+      .replace(/([.!?])\s+/g, "$1|")
+      .split("|")
+      .filter(s => s.trim().length > 0);
+    setSubtitles(sentences);
+    
+    // Генерируем иллюстрации
+    await generateImagesFromStory(tale);
+  }, [generateImagesFromStory]);
   
   // Запуск режима чтения
   const startReadingMode = useCallback(() => {
@@ -272,7 +272,7 @@ export default function Home() {
           Волшебные Сказки
         </h1>
         <p className="text-lg md:text-xl text-center mb-8 text-gray-700">
-          Создавай уникальные сказки с помощью искусственного интеллекта, 
+          Создавайте уникальные сказки с помощью искусственного интеллекта, 
           смотри иллюстрации и слушай озвучку!
         </p>
 
