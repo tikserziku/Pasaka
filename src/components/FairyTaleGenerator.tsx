@@ -56,7 +56,9 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   // Проверяем доступность API при загрузке компонента
   useEffect(() => {
     const checkApi = async () => {
+      console.log("Проверка доступности API...");
       const isAvailable = await checkApiAvailability('/api/openai/chat');
+      console.log("API доступен:", isAvailable);
       setApiAvailable(isAvailable);
       
       if (!isAvailable) {
@@ -71,6 +73,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   const { append, isLoading, messages } = useChat({
     api: '/api/openai/chat',
     onFinish: (message) => {
+      console.log("Получен ответ от API:", message.content.substring(0, 100) + "...");
       if (message.content.trim().length > 0) {
         onTaleGenerated(message.content);
         // Сбрасываем счетчик повторных попыток при успехе
@@ -111,6 +114,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   }, [error, retryCount]);
 
   const handleGenerateTale = useCallback(async () => {
+    console.log("Нажата кнопка генерации сказки");
     setError(null);
     onGenerating();
     
@@ -141,26 +145,34 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
     - Кульминационную сцену ближе к концу
     
     Пожалуйста, верни только текст сказки без дополнительных пояснений.`;
+
+    console.log("Подготовлен промпт для API:", systemPrompt.substring(0, 100) + "...");
     
     await append({
       role: 'user',
       content: systemPrompt,
     });
+    
+    console.log("Запрос отправлен в API");
   }, [append, length, theme, prompt, onGenerating]);
 
   return (
-    <div className="w-full max-w-lg mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Генератор сказок</h2>
+    <div className="w-full max-w-lg mx-auto form-container">
+      <div className="bg-yellow-100 p-2 mb-4 rounded">
+        Отладка: Форма для генерации сказки должна быть видна ниже
+      </div>
+      
+      <h2 className="text-2xl font-bold mb-4 text-purple-800">Генератор сказок</h2>
       
       <div className="mb-4">
-        <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="theme-select" className="form-label">
           Тема сказки:
         </label>
         <select 
           id="theme-select"
           value={theme}
           onChange={(e) => setTheme(e.target.value as ThemeType)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          className="form-select"
           aria-label="Выберите тему сказки"
           disabled={isLoading}
         >
@@ -171,14 +183,14 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       </div>
       
       <div className="mb-4">
-        <label htmlFor="length-select" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="length-select" className="form-label">
           Длина сказки:
         </label>
         <select 
           id="length-select"
           value={length}
           onChange={(e) => setLength(e.target.value as LengthType)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          className="form-select"
           aria-label="Выберите длину сказки"
           disabled={isLoading}
         >
@@ -189,15 +201,16 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       </div>
       
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="prompt-input" className="form-label">
           О чем сказка? (необязательно):
         </label>
         <input
+          id="prompt-input"
           type="text"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Например: о драконе и принцессе"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          className="form-input"
           disabled={isLoading}
         />
         <p className="mt-1 text-sm text-gray-500">
@@ -221,12 +234,11 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       <button
         onClick={handleGenerateTale}
         disabled={isLoading || !apiAvailable}
-        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
-                  disabled:bg-purple-300 transition-colors flex items-center justify-center"
+        className="form-button"
       >
         {isLoading ? (
           <>
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
