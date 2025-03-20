@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import FairyTaleGenerator from '@/components/FairyTaleGenerator';
 import Image from 'next/image';
+import ErrorHandler from '@/components/ErrorHandler';
 
 // Типы для управления приложением
 type AppState = 'initial' | 'generating-story' | 'generating-images' | 'generating-audio' | 'ready' | 'reading';
@@ -55,8 +56,13 @@ export default function Home() {
           localStorage.removeItem('story');
           localStorage.removeItem('images');
           localStorage.removeItem('appState');
+        } else if (savedState === 'ready' && savedStory) {
+          // Восстанавливаем последнюю сгенерированную сказку
+          console.log('Восстановление предыдущей сказки');
+          setStory(savedStory);
+          setAppState('ready');
         } else {
-          console.log('Восстановление предыдущего состояния невозможно, сброс к начальному');
+          console.log('Сброс к начальному состоянию');
           // Сбрасываем все к начальному состоянию
           setAppState('initial');
           localStorage.setItem('appState', 'initial');
@@ -374,6 +380,7 @@ export default function Home() {
   const handleStartGenerating = useCallback(() => {
     console.log('Начало генерации сказки');
     setAppState('generating-story');
+    setIsGeneratingStory(true);
     
     // Сохраняем состояние
     try {
@@ -382,6 +389,25 @@ export default function Home() {
       console.error('Ошибка при сохранении состояния:', err);
     }
   }, []);
+
+  // Функция для обработки ошибок и исправления состояния
+  const handleErrorRecovery = useCallback(() => {
+    // Если произошла ошибка при генерации сказки, возвращаемся к начальному состоянию
+    if (appState === 'generating-story') {
+      setAppState('initial');
+      setIsGeneratingStory(false);
+    } else if (appState === 'generating-images' || appState === 'generating-audio') {
+      // Если ошибка произошла при генерации изображений или аудио, 
+      // но у нас есть сказка, переходим к состоянию ready
+      if (story) {
+        setAppState('ready');
+      } else {
+        setAppState('initial');
+      }
+    }
+    
+    setError(null); // Очищаем ошибку
+  }, [appState, story]);
   
   return (
     <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-gradient-to-b from-blue-50 to-purple-50">
@@ -395,14 +421,29 @@ export default function Home() {
           смотри иллюстрации и слушай озвучку!
         </p>
 
-        {appState === 'initial' ? (
+        {/* Общий обработчик ошибок для всего приложения */}
+        {error && (
+          <div className="mb-6">
+            <ErrorHandler
+              error={error}
+              onRetry={handleErrorRecovery}
+              onClose={() => setError(null)}
+              errorType="api"
+            />
+          </div>
+        )}
+
+        {/* Генератор сказок в начальном состоянии */}
+        {(appState === 'initial' || appState === 'generating-story') && (
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <FairyTaleGenerator 
               onTaleGenerated={handleTaleGenerated} 
               onGenerating={handleStartGenerating}
             />
           </div>
-        ) : appState === 'reading' ? (
+        )}
+
+        {appState === 'reading' ? (
           // Режим чтения с полноэкранными изображениями и субтитрами
           <div className="fixed inset-0 bg-black z-50 flex flex-col">
             <button 
@@ -438,181 +479,192 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
-            {/* Показываем сгенерированную сказку */}
-            {story && (
+          // Все остальные состояния кроме 'initial' и 'reading'
+          (appState !== 'initial' && appState !== 'generating-story') && (
+            <div className="flex flex-col gap-6">
+              {/* Показываем сгенерированную сказку */}
+              {story && (
+                <div className="bg-white p-6 rounded-lg shadow-lg">
+                  <h2 className="text-2xl font-bold mb-4 text-gray-800">Ваша сказка</h2>
+                  <div className="prose max-w-full">
+                    {story.split('\n').map((paragraph, index) => (
+                      paragraph.trim() ? <p key={index} className="mb-4 text-gray-800">{paragraph}</p> : null
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Блок с иллюстрациями */}
               <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold mb-4 text-gray-800">Ваша сказка</h2>
-                <div className="prose max-w-full">
-                  {story.split('\n').map((paragraph, index) => (
-                    paragraph.trim() ? <p key={index} className="mb-4 text-gray-800">{paragraph}</p> : null
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Блок с иллюстрациями */}
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">Иллюстрации к сказке</h2>
-              
-              {imagesStatus === 'loading' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="border rounded-lg p-8 flex items-center justify-center bg-gray-100 h-64">
-                      <div className="animate-pulse flex flex-col items-center">
-                        <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
-                        <div className="text-xl text-gray-500">Генерация...</div>
+                <h2 className="text-2xl font-bold mb-4 text-gray-800">Иллюстрации к сказке</h2>
+                
+                {imagesStatus === 'loading' && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="border rounded-lg p-8 flex items-center justify-center bg-gray-100 h-64">
+                        <div className="animate-pulse flex flex-col items-center">
+                          <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
+                          <div className="text-xl text-gray-500">Генерация...</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {imagesStatus === 'success' && images.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {images.map((imageUrl, index) => (
-                    <div key={index} className="border rounded-lg overflow-hidden shadow-md h-64 relative">
-                      <div className="relative w-full h-full">
-                        <Image 
-                          src={imageUrl} 
-                          alt={`Иллюстрация ${index + 1} к сказке`}
-                          fill
-                          style={{ objectFit: 'cover' }}
-                          unoptimized
-                          onError={() => {
-                            console.error(`Ошибка загрузки изображения ${index + 1}`);
-                          }}
-                        />
+                    ))}
+                  </div>
+                )}
+                
+                {imagesStatus === 'success' && images.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {images.map((imageUrl, index) => (
+                      <div key={index} className="border rounded-lg overflow-hidden shadow-md h-64 relative">
+                        <div className="relative w-full h-full">
+                          <Image 
+                            src={imageUrl} 
+                            alt={`Иллюстрация ${index + 1} к сказке`}
+                            fill
+                            style={{ objectFit: 'cover' }}
+                            unoptimized
+                            onError={() => {
+                              console.error(`Ошибка загрузки изображения ${index + 1}`);
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {imagesStatus === 'error' && (
-                <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
-                  <p className="font-medium">Не удалось загрузить изображения</p>
-                  {error && <p className="mt-1">{error}</p>}
-                  <button 
-                    className="mt-2 bg-red-100 text-red-800 px-3 py-1 rounded"
-                    onClick={() => generateImagesFromStory(story)}
-                  >
-                    Попробовать снова
-                  </button>
-                </div>
-              )}
-              
-              {imagesStatus === 'idle' && appState !== 'generating-story' && (
-                <p className="text-gray-500">Изображения будут созданы после генерации сказки</p>
-              )}
-            </div>
-            
-            {/* Блок с аудио */}
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">Озвучивание сказки</h2>
-              
-              {audioStatus === 'loading' && (
-                <div className="border rounded-lg p-8 flex items-center justify-center bg-gray-100">
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
-                    <div className="text-xl text-gray-500">Создание аудио...</div>
+                    ))}
                   </div>
-                </div>
-              )}
-              
-              {audioStatus === 'success' && audioUrl && (
-                <div>
-                  {/* Обычный HTML5 аудиоплеер с явными стилями */}
-                  <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
-                    <audio 
-                      ref={audioRef}
-                      src={audioUrl}
-                      controls
-                      onEnded={handleAudioEnded}
-                      className="w-full"
-                      style={{ 
-                        display: 'block',
-                        width: '100%',
-                        minHeight: '40px',
-                        backgroundColor: '#f9fafb',
-                        borderRadius: '0.375rem'
-                      }}
-                    />
-                  </div>
-                  
-                  {/* Альтернативный плеер для отладки */}
-                  <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
-                    <p className="text-gray-700 mb-2">Если аудиоплеер не виден, используйте эти кнопки:</p>
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => {
-                          if (audioRef.current) {
-                            audioRef.current.play();
-                          }
-                        }}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                      >
-                        Играть
-                      </button>
-                      
-                      <button
-                        onClick={() => {
-                          if (audioRef.current) {
-                            audioRef.current.pause();
-                          }
-                        }}
-                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded ml-2"
-                      >
-                        Пауза
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={startReadingMode}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
-                              transition-colors"
-                  >
-                    Запустить режим чтения с иллюстрациями
-                  </button>
-                </div>
-              )}
-              
-              {audioStatus === 'error' && (
-                <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
-                  <p className="font-medium">Не удалось создать аудио</p>
-                  {error && <p className="mt-1">{error}</p>}
-                  <div className="mt-3">
+                )}
+                
+                {imagesStatus === 'error' && (
+                  <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
+                    <p className="font-medium">Не удалось загрузить изображения</p>
                     <button 
-                      onClick={() => generateAudioFromStory(story)}
-                      className="bg-red-100 text-red-800 px-3 py-1 rounded"
+                      className="mt-2 bg-red-100 text-red-800 px-3 py-1 rounded"
+                      onClick={() => generateImagesFromStory(story)}
                     >
                       Попробовать снова
                     </button>
                   </div>
-                </div>
-              )}
+                )}
+                
+                {imagesStatus === 'idle' && appState !== 'generating-story' && (
+                  <p className="text-gray-500">Изображения будут созданы после генерации сказки</p>
+                )}
+              </div>
               
-              {audioStatus === 'idle' && appState !== 'generating-story' && appState !== 'generating-images' && (
-                <p className="text-gray-500">Аудио будет создано после генерации сказки и иллюстраций</p>
+              {/* Блок с аудио */}
+              <div className="bg-white p-6 rounded-lg shadow-lg">
+                <h2 className="text-2xl font-bold mb-4 text-gray-800">Озвучивание сказки</h2>
+                
+                {audioStatus === 'loading' && (
+                  <div className="border rounded-lg p-8 flex items-center justify-center bg-gray-100">
+                    <div className="animate-pulse flex flex-col items-center">
+                      <div className="rounded-full bg-gray-300 h-12 w-12 mb-2"></div>
+                      <div className="text-xl text-gray-500">Создание аудио...</div>
+                    </div>
+                  </div>
+                )}
+                
+                {audioStatus === 'success' && audioUrl && (
+                  <div>
+                    {/* Обычный HTML5 аудиоплеер с явными стилями */}
+                    <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
+                      <audio 
+                        ref={audioRef}
+                        src={audioUrl}
+                        controls
+                        onEnded={handleAudioEnded}
+                        className="w-full visible"
+                        style={{ 
+                          display: 'block',
+                          width: '100%',
+                          minHeight: '40px',
+                          backgroundColor: '#f9fafb',
+                          borderRadius: '0.375rem'
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Альтернативный плеер для отладки */}
+                    <div className="p-4 border border-gray-300 rounded-lg bg-gray-50 mb-4">
+                      <p className="text-gray-700 mb-2">Если аудиоплеер не виден, используйте эти кнопки:</p>
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => {
+                            if (audioRef.current) {
+                              audioRef.current.play();
+                            }
+                          }}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                        >
+                          Играть
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            if (audioRef.current) {
+                              audioRef.current.pause();
+                            }
+                          }}
+                          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded ml-2"
+                        >
+                          Пауза
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={startReadingMode}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
+                                transition-colors"
+                    >
+                      Запустить режим чтения с иллюстрациями
+                    </button>
+                  </div>
+                )}
+                
+                {audioStatus === 'error' && (
+                  <div className="p-4 border-l-4 border-red-500 bg-red-50 text-red-700">
+                    <p className="font-medium">Не удалось создать аудио</p>
+                    <div className="mt-3">
+                      <button 
+                        onClick={() => generateAudioFromStory(story)}
+                        className="bg-red-100 text-red-800 px-3 py-1 rounded"
+                      >
+                        Попробовать снова
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {audioStatus === 'idle' && appState !== 'generating-story' && appState !== 'generating-images' && (
+                  <p className="text-gray-500">Аудио будет создано после генерации сказки и иллюстраций</p>
+                )}
+              </div>
+              
+              {/* Кнопка для создания новой сказки */}
+              {appState !== 'generating-story' && (
+                <button
+                  onClick={resetApp}
+                  className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition-colors"
+                >
+                  Создать новую сказку
+                </button>
               )}
             </div>
-            
-            {/* Кнопка для создания новой сказки */}
-            {appState !== 'generating-story' && (
-              <button
-                onClick={resetApp}
-                className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition-colors"
-              >
-                Создать новую сказку
-              </button>
-            )}
-          </div>
+          )
         )}
         
-        {/* Отладочная информация - уберите в продакшн */}
-        <div className="mt-8 text-xs text-gray-400">
-          Текущее состояние: {appState}
+        {/* Добавляем кнопку для диагностики проблем */}
+        <div className="mt-4 p-4 bg-white rounded-lg shadow-lg">
+          <details className="text-sm text-gray-600">
+            <summary className="cursor-pointer font-medium">Диагностическая информация</summary>
+            <div className="mt-2 text-xs space-y-1">
+              <p>Текущее состояние: <span className="font-mono">{appState}</span></p>
+              <p>История создана: <span className="font-mono">{story ? 'Да' : 'Нет'}</span></p>
+              <p>Количество изображений: <span className="font-mono">{images.length}</span></p>
+              <p>Статус изображений: <span className="font-mono">{imagesStatus}</span></p>
+              <p>Статус аудио: <span className="font-mono">{audioStatus}</span></p>
+              <p>Локальное хранилище настроено: <span className="font-mono">{typeof window !== 'undefined' && !!window.localStorage ? 'Да' : 'Нет'}</span></p>
+            </div>
+          </details>
         </div>
       </div>
     </main>
