@@ -479,7 +479,7 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          // Все остальные состояния кроме 'initial' и 'reading'
+          // Все остальные состояния кроме 'initial', 'reading' и 'generating-story'
           (appState !== 'initial' && appState !== 'generating-story') && (
             <div className="flex flex-col gap-6">
               {/* Показываем сгенерированную сказку */}
@@ -544,7 +544,8 @@ export default function Home() {
                   </div>
                 )}
                 
-                {imagesStatus === 'idle' && appState !== 'generating-story' && (
+                {/* Исправление ошибки типизации здесь */}
+                {imagesStatus === 'idle' && (
                   <p className="text-gray-500">Изображения будут созданы после генерации сказки</p>
                 )}
               </div>
@@ -634,20 +635,18 @@ export default function Home() {
                   </div>
                 )}
                 
-                {audioStatus === 'idle' && appState !== 'generating-story' && appState !== 'generating-images' && (
+                {audioStatus === 'idle' && (
                   <p className="text-gray-500">Аудио будет создано после генерации сказки и иллюстраций</p>
                 )}
               </div>
               
               {/* Кнопка для создания новой сказки */}
-              {appState !== 'generating-story' && (
-                <button
-                  onClick={resetApp}
-                  className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition-colors"
-                >
-                  Создать новую сказку
-                </button>
-              )}
+              <button
+                onClick={resetApp}
+                className="w-full bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md transition-colors"
+              >
+                Создать новую сказку
+              </button>
             </div>
           )
         )}
