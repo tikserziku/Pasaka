@@ -11,6 +11,7 @@ type ImageStatus = 'idle' | 'loading' | 'success' | 'error';
 export default function Home() {
   // Состояние приложения
   const [appState, setAppState] = useState<AppState>('initial');
+  const appStateRef = useRef<AppState>('initial'); // Добавляем ref для отслеживания состояния
   
   // Основное содержимое
   const [story, setStory] = useState<string>('');
@@ -31,6 +32,42 @@ export default function Home() {
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const subtitleTimers = useRef<NodeJS.Timeout[]>([]);
+  
+  // Сохраняем состояние в ref для отслеживания изменений
+  useEffect(() => {
+    appStateRef.current = appState;
+    console.log('Состояние приложения изменилось:', appState);
+  }, [appState]);
+
+  // Восстанавливаем состояние из localStorage при загрузке
+  useEffect(() => {
+    // Проверяем хранилище только при клиентском рендеринге
+    if (typeof window !== 'undefined') {
+      try {
+        const savedState = localStorage.getItem('appState');
+        const savedStory = localStorage.getItem('story');
+        
+        // Если есть сохраненное состояние, инициализируем приложение
+        if (savedState === 'initial' || !savedState) {
+          console.log('Инициализация нового состояния');
+          setAppState('initial');
+          // Очищаем все предыдущие данные
+          localStorage.removeItem('story');
+          localStorage.removeItem('images');
+          localStorage.removeItem('appState');
+        } else {
+          console.log('Восстановление предыдущего состояния невозможно, сброс к начальному');
+          // Сбрасываем все к начальному состоянию
+          setAppState('initial');
+          localStorage.setItem('appState', 'initial');
+        }
+      } catch (err) {
+        console.error('Ошибка при чтении из localStorage:', err);
+        // При ошибке сбрасываем все к начальному состоянию
+        setAppState('initial');
+      }
+    }
+  }, []);
   
   // Очистка таймеров при размонтировании
   useEffect(() => {
@@ -57,6 +94,11 @@ export default function Home() {
   
   // Генерация изображений на основе сказки
   const generateImagesFromStory = useCallback(async (storyText: string) => {
+    if (appStateRef.current !== 'generating-images') {
+      console.log('Пропуск генерации изображений, так как состояние изменилось');
+      return;
+    }
+    
     setImagesStatus('loading');
     try {
       // Анализируем текст для создания более точных промптов
@@ -80,6 +122,12 @@ export default function Home() {
       
       // Генерируем изображения последовательно для снижения нагрузки
       for (const prompt of prompts) {
+        // Проверяем, не изменилось ли состояние
+        if (appStateRef.current !== 'generating-images') {
+          console.log('Прерывание генерации изображений, состояние изменилось');
+          break;
+        }
+        
         try {
           console.log('Отправка запроса на генерацию изображения с промптом:', prompt);
           
@@ -117,23 +165,33 @@ export default function Home() {
       setImages(imageUrls);
       setImagesStatus('success');
       
-      // Переходим к созданию аудио
-      setAppState('generating-audio');
-      await generateAudioFromStory(storyText);
-      
+      // Проверяем, что состояние не изменилось
+      if (appStateRef.current === 'generating-images') {
+        // Переходим к созданию аудио
+        setAppState('generating-audio');
+        await generateAudioFromStory(storyText);
+      }
     } catch (err) {
       console.error('Ошибка при генерации изображений:', err);
       setImagesStatus('error');
       setError(err instanceof Error ? err.message : 'Неизвестная ошибка при создании изображений');
       
-      // Даже если изображения не сгенерированы, пробуем создать аудио
-      setAppState('generating-audio');
-      await generateAudioFromStory(storyText);
+      // Проверяем, что состояние не изменилось
+      if (appStateRef.current === 'generating-images') {
+        // Даже если изображения не сгенерированы, пробуем создать аудио
+        setAppState('generating-audio');
+        await generateAudioFromStory(storyText);
+      }
     }
   }, []);
   
   // Генерация аудио из текста
   const generateAudioFromStory = useCallback(async (storyText: string) => {
+    if (appStateRef.current !== 'generating-audio') {
+      console.log('Пропуск генерации аудио, так как состояние изменилось');
+      return;
+    }
+    
     setAudioStatus('loading');
     try {
       console.log('Начало генерации аудио из текста длиной:', storyText.length);
@@ -171,19 +229,33 @@ export default function Home() {
       
       setAudioUrl(url);
       setAudioStatus('success');
-      setAppState('ready');
+      
+      // Проверяем, что состояние не изменилось
+      if (appStateRef.current === 'generating-audio') {
+        setAppState('ready');
+      }
     } catch (err) {
       console.error('Ошибка при создании аудио:', err);
       setAudioStatus('error');
       setError(err instanceof Error ? err.message : 'Неизвестная ошибка при создании аудио');
-      setAppState('ready'); // Переходим в готовое состояние, даже если есть ошибки
+      
+      // Проверяем, что состояние не изменилось
+      if (appStateRef.current === 'generating-audio') {
+        setAppState('ready'); // Переходим в готовое состояние, даже если есть ошибки
+      }
     }
   }, [audioUrl]);
   
   // Генерация сказки - обработчик для FairyTaleGenerator
   const handleTaleGenerated = useCallback(async (tale: string) => {
+    // Проверяем, что состояние сейчас - generating-story
+    if (appStateRef.current !== 'generating-story') {
+      console.log('Пропуск обработки сгенерированной сказки, так как состояние изменилось');
+      return;
+    }
+    
+    console.log('Сказка сгенерирована, длина:', tale.length);
     setStory(tale);
-    setAppState('generating-images');
     
     // Разбиваем сказку на предложения для субтитров
     const sentences = tale
@@ -191,6 +263,17 @@ export default function Home() {
       .split("|")
       .filter(s => s.trim().length > 0);
     setSubtitles(sentences);
+    
+    // Обновляем текущее состояние
+    setAppState('generating-images');
+    
+    // Сохраняем историю в localStorage
+    try {
+      localStorage.setItem('story', tale);
+      localStorage.setItem('appState', 'generating-images');
+    } catch (err) {
+      console.error('Ошибка при сохранении в localStorage:', err);
+    }
     
     // Генерируем иллюстрации
     await generateImagesFromStory(tale);
@@ -206,6 +289,13 @@ export default function Home() {
     console.log('Запуск режима чтения');
     setAppState('reading');
     setCurrentSubtitleIndex(0);
+    
+    // Сохраняем состояние
+    try {
+      localStorage.setItem('appState', 'reading');
+    } catch (err) {
+      console.error('Ошибка при сохранении состояния:', err);
+    }
     
     // Очищаем предыдущие таймеры
     subtitleTimers.current.forEach(timer => clearTimeout(timer));
@@ -246,6 +336,13 @@ export default function Home() {
     console.log('Аудио завершило воспроизведение');
     setAppState('ready');
     subtitleTimers.current.forEach(timer => clearTimeout(timer));
+    
+    // Сохраняем состояние
+    try {
+      localStorage.setItem('appState', 'ready');
+    } catch (err) {
+      console.error('Ошибка при сохранении состояния:', err);
+    }
   }, []);
   
   // Сброс приложения
@@ -262,7 +359,29 @@ export default function Home() {
     setAudioStatus('idle');
     subtitleTimers.current.forEach(timer => clearTimeout(timer));
     console.log('Приложение сброшено');
+    
+    // Сбрасываем состояние в localStorage
+    try {
+      localStorage.removeItem('story');
+      localStorage.removeItem('images');
+      localStorage.setItem('appState', 'initial');
+    } catch (err) {
+      console.error('Ошибка при сбросе состояния:', err);
+    }
   }, [audioUrl]);
+  
+  // Обработчик начала генерации
+  const handleStartGenerating = useCallback(() => {
+    console.log('Начало генерации сказки');
+    setAppState('generating-story');
+    
+    // Сохраняем состояние
+    try {
+      localStorage.setItem('appState', 'generating-story');
+    } catch (err) {
+      console.error('Ошибка при сохранении состояния:', err);
+    }
+  }, []);
   
   return (
     <main className="flex min-h-screen flex-col items-center p-4 md:p-8 bg-gradient-to-b from-blue-50 to-purple-50">
@@ -280,7 +399,7 @@ export default function Home() {
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <FairyTaleGenerator 
               onTaleGenerated={handleTaleGenerated} 
-              onGenerating={() => setAppState('generating-story')}
+              onGenerating={handleStartGenerating}
             />
           </div>
         ) : appState === 'reading' ? (
@@ -490,6 +609,11 @@ export default function Home() {
             )}
           </div>
         )}
+        
+        {/* Отладочная информация - уберите в продакшн */}
+        <div className="mt-8 text-xs text-gray-400">
+          Текущее состояние: {appState}
+        </div>
       </div>
     </main>
   );
