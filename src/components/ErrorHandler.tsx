@@ -22,6 +22,14 @@ export default function ErrorHandler({
   errorType = 'generic'
 }: ErrorHandlerProps) {
   const [countdown, setCountdown] = useState<number>(0);
+  const [isVisible, setIsVisible] = useState<boolean>(!!error);
+  
+  // Делаем компонент видимым, когда есть ошибка
+  useEffect(() => {
+    if (error) {
+      setIsVisible(true);
+    }
+  }, [error]);
   
   // Сбрасываем таймер обратного отсчета при изменении ошибки
   useEffect(() => {
@@ -60,6 +68,17 @@ export default function ErrorHandler({
       clearTimeout(timeoutId);
     };
   }, [error, autoRetry, retryCount, maxRetries, onRetry]);
+  
+  // Обработчик закрытия уведомления об ошибке
+  const handleClose = () => {
+    // Анимируем скрытие
+    setIsVisible(false);
+    
+    // Вызываем onClose после небольшой задержки для анимации
+    setTimeout(() => {
+      if (onClose) onClose();
+    }, 300);
+  };
   
   if (!error) return null;
   
@@ -107,7 +126,11 @@ export default function ErrorHandler({
   const styles = getErrorStyles();
   
   return (
-    <div className={`p-4 mb-4 rounded-md border-l-4 ${styles.container} ${styles.text}`}>
+    <div 
+      className={`p-4 mb-4 rounded-md border-l-4 ${styles.container} ${styles.text} 
+                 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+      style={{ maxHeight: isVisible ? '500px' : '0px', overflow: 'hidden' }}
+    >
       <div className="flex items-start">
         <div className="flex-shrink-0 mr-3 text-xl">{styles.icon}</div>
         <div className="flex-1">
@@ -141,9 +164,9 @@ export default function ErrorHandler({
               </button>
             )}
             
-            {showClose && onClose && (
+            {showClose && (
               <button 
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-3 py-1 rounded text-sm bg-white border text-gray-700 hover:bg-gray-100"
               >
                 Закрыть
