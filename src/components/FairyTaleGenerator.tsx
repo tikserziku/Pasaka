@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChat } from 'ai/react';
+import ErrorHandler from './ErrorHandler';
 
 interface FairyTaleGeneratorProps {
   onTaleGenerated: (tale: string) => void;
@@ -52,28 +53,48 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   const [error, setError] = useState<string | null>(null);
   const [apiAvailable, setApiAvailable] = useState<boolean>(true);
   const [retryCount, setRetryCount] = useState<number>(0);
+  const [isForceApiCheck, setIsForceApiCheck] = useState<boolean>(false);
+  
+  // Сохраняем состояние ввода пользователя для восстановления при ошибках
+  const formStateRef = useRef({
+    prompt: '',
+    theme: 'волшебная' as ThemeType,
+    length: 'короткая' as LengthType
+  });
   
   // Проверяем доступность API при загрузке компонента
   useEffect(() => {
     const checkApi = async () => {
-      console.log("Проверка доступности API...");
-      const isAvailable = await checkApiAvailability('/api/openai/chat');
-      console.log("API доступен:", isAvailable);
-      setApiAvailable(isAvailable);
-      
-      if (!isAvailable) {
-        setError('API OpenAI недоступен. Возможно, не настроен API-ключ или сервер перегружен. Пожалуйста, попробуйте позже.');
+      try {
+        const isAvailable = await checkApiAvailability('/api/openai/chat');
+        setApiAvailable(isAvailable);
+        
+        if (!isAvailable) {
+          setError('API OpenAI недоступен. Возможно, не настроен API-ключ или сервер перегружен. Пожалуйста, попробуйте позже.');
+        }
+      } catch (e) {
+        // Если проверка API выдает ошибку, предполагаем, что API недоступен
+        setApiAvailable(false);
+        setError('Не удалось проверить доступность API. Пожалуйста, убедитесь, что у вас есть подключение к интернету.');
       }
     };
     
     checkApi();
-  }, []);
+  }, [isForceApiCheck]); // Перепроверка при изменении isForceApiCheck
+
+  // Сохраняем текущее состояние формы при каждом изменении
+  useEffect(() => {
+    formStateRef.current = {
+      prompt,
+      theme,
+      length
+    };
+  }, [prompt, theme, length]);
 
   // Используем ai/react для взаимодействия с чат-моделью
-  const { append, isLoading, messages } = useChat({
+  const { append, isLoading, messages, error: chatError } = useChat({
     api: '/api/openai/chat',
     onFinish: (message) => {
-      console.log("Получен ответ от API:", message.content.substring(0, 100) + "...");
       if (message.content.trim().length > 0) {
         onTaleGenerated(message.content);
         // Сбрасываем счетчик повторных попыток при успехе
@@ -102,6 +123,13 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
     }
   });
   
+  // Если есть ошибка из useChat, синхронизируем с нашим состоянием error
+  useEffect(() => {
+    if (chatError) {
+      setError(chatError.message);
+    }
+  }, [chatError]);
+  
   // Автоматическая повторная попытка при ошибках сервера (не более 3 раз)
   useEffect(() => {
     if (error && error.includes('сервер') && retryCount < 3) {
@@ -114,14 +142,21 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   }, [error, retryCount]);
 
   const handleGenerateTale = useCallback(async () => {
-    console.log("Нажата кнопка генерации сказки");
     setError(null);
     onGenerating();
+    
+    // Сохраняем текущее состояние формы перед отправкой запроса
+    formStateRef.current = {
+      prompt,
+      theme,
+      length
+    };
     
     // Проверяем доступность API перед отправкой запроса
     const isAvailable = await checkApiAvailability('/api/openai/chat');
     if (!isAvailable) {
       setError('API OpenAI недоступен. Пожалуйста, попробуйте позже.');
+      setApiAvailable(false);
       return;
     }
     
@@ -145,34 +180,62 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
     - Кульминационную сцену ближе к концу
     
     Пожалуйста, верни только текст сказки без дополнительных пояснений.`;
-
-    console.log("Подготовлен промпт для API:", systemPrompt.substring(0, 100) + "...");
     
-    await append({
-      role: 'user',
-      content: systemPrompt,
-    });
-    
-    console.log("Запрос отправлен в API");
+    try {
+      await append({
+        role: 'user',
+        content: systemPrompt,
+      });
+    } catch (err) {
+      // Обрабатываем ошибку, если append не удался
+      console.error('Ошибка при отправке запроса:', err);
+      setError('Ошибка при отправке запроса. Пожалуйста, попробуйте еще раз.');
+      // Форма останется видимой, т.к. мы не меняем состояние приложения
+    }
   }, [append, length, theme, prompt, onGenerating]);
 
+  // Функция для проверки API вручную
+  const handleCheckAPI = useCallback(() => {
+    setIsForceApiCheck(prev => !prev);
+  }, []);
+
+  // Восстановление последнего состояния формы
+  const handleRestoreFormState = useCallback(() => {
+    setPrompt(formStateRef.current.prompt);
+    setTheme(formStateRef.current.theme);
+    setLength(formStateRef.current.length);
+  }, []);
+
   return (
-    <div className="w-full max-w-lg mx-auto form-container">
-      <div className="bg-yellow-100 p-2 mb-4 rounded">
-        Отладка: Форма для генерации сказки должна быть видна ниже
-      </div>
-      
+    <div className="w-full max-w-lg mx-auto bg-white p-6 rounded-lg shadow-lg">
       <h2 className="text-2xl font-bold mb-4 text-purple-800">Генератор сказок</h2>
       
+      {/* Сообщение об ошибке */}
+      {error && (
+        <ErrorHandler
+          error={error}
+          onRetry={() => {
+            setError(null);
+            handleRestoreFormState();
+            handleGenerateTale();
+          }}
+          onClose={() => setError(null)}
+          retryCount={retryCount}
+          maxRetries={3}
+          errorType={error.includes('API') ? 'api' : 'generic'}
+          showClose={true}
+        />
+      )}
+      
       <div className="mb-4">
-        <label htmlFor="theme-select" className="form-label">
+        <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 mb-1">
           Тема сказки:
         </label>
         <select 
           id="theme-select"
           value={theme}
           onChange={(e) => setTheme(e.target.value as ThemeType)}
-          className="form-select"
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
           aria-label="Выберите тему сказки"
           disabled={isLoading}
         >
@@ -183,14 +246,14 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       </div>
       
       <div className="mb-4">
-        <label htmlFor="length-select" className="form-label">
+        <label htmlFor="length-select" className="block text-sm font-medium text-gray-700 mb-1">
           Длина сказки:
         </label>
         <select 
           id="length-select"
           value={length}
           onChange={(e) => setLength(e.target.value as LengthType)}
-          className="form-select"
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
           aria-label="Выберите длину сказки"
           disabled={isLoading}
         >
@@ -201,7 +264,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       </div>
       
       <div className="mb-6">
-        <label htmlFor="prompt-input" className="form-label">
+        <label htmlFor="prompt-input" className="block text-sm font-medium text-gray-700 mb-1">
           О чем сказка? (необязательно):
         </label>
         <input
@@ -210,7 +273,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Например: о драконе и принцессе"
-          className="form-input"
+          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
           disabled={isLoading}
         />
         <p className="mt-1 text-sm text-gray-500">
@@ -218,27 +281,16 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
         </p>
       </div>
       
-      {error && (
-        <div className="mb-4 p-3 rounded-md bg-red-50 border-l-4 border-red-500 text-red-700">
-          <p>{error}</p>
-          {retryCount > 0 && (
-            <p className="mt-2 text-sm">
-              {retryCount >= 3 ? 
-                'Достигнуто максимальное количество попыток. Попробуйте позже.' : 
-                `Повторных попыток: ${retryCount}/3`}
-            </p>
-          )}
-        </div>
-      )}
-      
+      {/* Основная кнопка генерации */}
       <button
         onClick={handleGenerateTale}
         disabled={isLoading || !apiAvailable}
-        className="form-button"
+        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
+                  disabled:bg-purple-300 transition-colors flex items-center justify-center mb-4"
       >
         {isLoading ? (
           <>
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -248,6 +300,25 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
           'Создать сказку'
         )}
       </button>
+      
+      {/* Раздел для отладки */}
+      <div className="mt-4 border-t pt-4">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">Диагностика</h3>
+        <div className="flex space-x-2">
+          <button
+            onClick={handleCheckAPI}
+            className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded"
+          >
+            Проверить API
+          </button>
+          <div className="text-xs py-1">
+            Статус API: 
+            <span className={`ml-1 px-1 py-0.5 rounded ${apiAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {apiAvailable ? 'Доступен' : 'Недоступен'}
+            </span>
+          </div>
+        </div>
+      </div>
       
       <div className="mt-4 text-center text-sm text-gray-500">
         Создание сказки может занять до 15-20 секунд
