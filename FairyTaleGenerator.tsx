@@ -53,6 +53,29 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   const [apiAvailable, setApiAvailable] = useState<boolean>(true);
   const [retryCount, setRetryCount] = useState<number>(0);
   
+  // Создаем системный промпт с детальными инструкциями для AI
+  const createSystemPrompt = useCallback(() => {
+    return `Ты волшебный рассказчик сказок. Создай ${length} сказку на ${theme} тему${prompt ? ` о ${prompt}` : ''}. 
+    
+    Правила для сказки:
+    1. Сказка должна быть подходящей для детей от 4 до 10 лет
+    2. Должна содержать четкое начало, середину и конец
+    3. Иметь поучительный смысл или мораль
+    4. Включать яркие описания мест, персонажей и событий
+    5. Использовать простой и понятный язык
+    6. Иметь 1-2 главных персонажа с именами
+    7. Содержать несколько диалогов
+    
+    Оформляй текст в виде абзацев, выделяй диалоги. Используй яркие описания для возможности создания иллюстраций к сказке.
+    
+    Обязательно включи:
+    - Яркое описание главного героя в начале сказки
+    - Интересную встречу или событие в середине
+    - Кульминационную сцену ближе к концу
+    
+    Пожалуйста, верни только текст сказки без дополнительных пояснений.`;
+  }, [length, theme, prompt]);
+  
   // Проверяем доступность API при загрузке компонента
   useEffect(() => {
     const checkApi = async () => {
@@ -68,7 +91,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   }, []);
 
   // Используем ai/react для взаимодействия с чат-моделью
-  const { append, isLoading, messages } = useChat({
+  const { append, isLoading } = useChat({
     api: '/api/openai/chat',
     onFinish: (message) => {
       if (message.content.trim().length > 0) {
@@ -99,17 +122,6 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
     }
   });
   
-  // Автоматическая повторная попытка при ошибках сервера (не более 3 раз)
-  useEffect(() => {
-    if (error && error.includes('сервер') && retryCount < 3) {
-      const retryTimer = setTimeout(() => {
-        handleGenerateTale();
-      }, 3000 * retryCount); // Увеличиваем время ожидания с каждой повторной попыткой
-      
-      return () => clearTimeout(retryTimer);
-    }
-  }, [error, retryCount]);
-
   const handleGenerateTale = useCallback(async () => {
     setError(null);
     onGenerating();
@@ -121,32 +133,24 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
       return;
     }
     
-    // Создаем системный промпт с детальными инструкциями для AI
-    const systemPrompt = `Ты волшебный рассказчик сказок. Создай ${length} сказку на ${theme} тему${prompt ? ` о ${prompt}` : ''}. 
-    
-    Правила для сказки:
-    1. Сказка должна быть подходящей для детей от 4 до 10 лет
-    2. Должна содержать четкое начало, середину и конец
-    3. Иметь поучительный смысл или мораль
-    4. Включать яркие описания мест, персонажей и событий
-    5. Использовать простой и понятный язык
-    6. Иметь 1-2 главных персонажа с именами
-    7. Содержать несколько диалогов
-    
-    Оформляй текст в виде абзацев, выделяй диалоги. Используй яркие описания для возможности создания иллюстраций к сказке.
-    
-    Обязательно включи:
-    - Яркое описание главного героя в начале сказки
-    - Интересную встречу или событие в середине
-    - Кульминационную сцену ближе к концу
-    
-    Пожалуйста, верни только текст сказки без дополнительных пояснений.`;
-    
+    // Отправляем запрос к API
+    const systemPrompt = createSystemPrompt();
     await append({
       role: 'user',
       content: systemPrompt,
     });
-  }, [append, length, theme, prompt, onGenerating]);
+  }, [append, createSystemPrompt, onGenerating]);
+  
+  // Автоматическая повторная попытка при ошибках сервера (не более 3 раз)
+  useEffect(() => {
+    if (error && error.includes('сервер') && retryCount < 3) {
+      const retryTimer = setTimeout(() => {
+        handleGenerateTale();
+      }, 3000 * retryCount); // Увеличиваем время ожидания с каждой повторной попыткой
+      
+      return () => clearTimeout(retryTimer);
+    }
+  }, [error, retryCount, handleGenerateTale]);
 
   return (
     <div className="w-full max-w-lg mx-auto">
