@@ -31,21 +31,23 @@ body {
     text-wrap: balance;
   }
 }
-/* Добавьте эти стили в ваш globals.css или в компонент через inline-styles */
 
-/* Стили для всех полей ввода */
+/* Исправленные стили для всех полей ввода */
 input, select, textarea {
-  color: #333333 !important; /* Темный цвет текста */
-  background-color: #ffffff !important; /* Белый фон */
-  border: 1px solid #d1d5db !important; /* Серая рамка */
+  color: #333333 !important; 
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
 }
 
 /* Стили для плейсхолдеров */
 input::placeholder, 
 select::placeholder, 
 textarea::placeholder {
-  color: #9ca3af !important; /* Серый цвет для плейсхолдера */
-  opacity: 1 !important; /* Полная непрозрачность */
+  color: #9ca3af !important;
+  opacity: 1 !important;
 }
 
 /* Стили для фокуса */
@@ -53,25 +55,79 @@ input:focus,
 select:focus, 
 textarea:focus {
   outline: none !important;
-  border-color: #8b5cf6 !important; /* Фиолетовая рамка при фокусе */
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important; /* Тень вокруг поля */
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
 }
 
 /* Стили для выпадающих списков */
 select {
-  appearance: auto !important; /* Включает стандартный вид выпадающего списка */
-  padding-right: 2rem !important; /* Отступ справа для стрелки */
+  appearance: auto !important;
+  padding-right: 2rem !important;
+  padding: 0.5rem !important;
 }
 
-/* Стили для темного режима, если используется */
+/* Исправления для темного режима */
 @media (prefers-color-scheme: dark) {
   input, select, textarea {
-    color: #e5e7eb !important; /* Светлый цвет текста */
-    background-color: #374151 !important; /* Темный фон */
-    border-color: #4b5563 !important; /* Темно-серая рамка */
+    color: #e5e7eb !important;
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
   }
   
   input::placeholder, select::placeholder, textarea::placeholder {
-    color: #9ca3af !important; /* Серый плейсхолдер для темного режима */
+    color: #9ca3af !important;
   }
+}
+
+/* Дополнительные стили для отладки и видимости форм */
+.form-container {
+  border: 1px solid #e5e7eb;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.form-select {
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.form-button {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  color: #ffffff;
+  background-color: #8b5cf6;
+  transition: background-color 0.2s;
+}
+
+.form-button:hover {
+  background-color: #7c3aed;
+}
+
+.form-button:disabled {
+  background-color: #c4b5fd;
+  cursor: not-allowed;
 }
