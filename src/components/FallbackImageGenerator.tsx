@@ -265,11 +265,11 @@ export default function FallbackImageGenerator({
           </span>
         </div>
         
+        {/* Исправляем проблему с типами - явно проверяем, что status не равен 'loading' */}
         {status !== 'loading' && (
           <button
             onClick={handleSwitchProvider}
             className="text-xs px-2 py-0.5 text-gray-600 hover:text-gray-900 underline"
-            disabled={status === 'loading'}
           >
             Сменить провайдер
           </button>
