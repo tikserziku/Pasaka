@@ -8,8 +8,9 @@
 [build.environment]
   NODE_VERSION = "18.17.0"
   NPM_FLAGS = "--legacy-peer-deps"
+  # Не указывайте здесь значения ключей API, они должны быть в настройках Netlify
   OPENAI_API_KEY = ""
-  REPLICATE_API_TOKEN = "r8_d8ipwoukb61wLY5VE0ftkCFsY4bRGGa05vpa2"
+  REPLICATE_API_TOKEN = ""
 
 [functions]
   node_bundler = "esbuild"
@@ -19,30 +20,27 @@
   ]
   included_files = ["src/app/api/**"]
 
-# Исправленные перенаправления с более точным соответствием путей
+# Исправленные перенаправления с более точным соответствием путей и правильным указанием параметров
 [[redirects]]
   from = "/api/openai/chat"
   to = "/.netlify/functions/openai-api"
   status = 200
   force = true
-  [redirects.query]
-    path = "chat"
+  query = { path = "chat" }
 
 [[redirects]]
   from = "/api/openai/generate-image"
   to = "/.netlify/functions/openai-api"
   status = 200
   force = true
-  [redirects.query]
-    path = "generate-image"
+  query = { path = "generate-image" }
 
 [[redirects]]
   from = "/api/openai/text-to-speech"
   to = "/.netlify/functions/openai-api"
   status = 200
   force = true
-  [redirects.query]
-    path = "text-to-speech"
+  query = { path = "text-to-speech" }
 
 [[redirects]]
   from = "/api/replicate/*"
