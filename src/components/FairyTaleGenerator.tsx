@@ -35,7 +35,12 @@ const checkApiAvailability = async (apiPath: string): Promise<boolean> => {
     
     const response = await fetch(apiPath, {
       method: 'HEAD',
-      signal: controller.signal
+      signal: controller.signal,
+      // Добавляем случайный параметр для предотвращения кэширования
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
     });
     
     clearTimeout(timeoutId);
@@ -66,10 +71,29 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   useEffect(() => {
     const checkApi = async () => {
       try {
+        // Сначала пробуем прямой запрос к API
         const isAvailable = await checkApiAvailability('/api/openai/chat');
-        setApiAvailable(isAvailable);
         
-        if (!isAvailable) {
+        if (isAvailable) {
+          setApiAvailable(true);
+          setError(null);
+          return;
+        }
+        
+        // Если API недоступен, проверяем функцию Netlify для тестирования
+        const testResponse = await fetch('/.netlify/functions/test-openai');
+        if (testResponse.ok) {
+          const testData = await testResponse.json();
+          
+          if (testData.success) {
+            setApiAvailable(true);
+            setError(null);
+          } else {
+            setApiAvailable(false);
+            setError(`API OpenAI недоступен: ${testData.details || 'причина не указана'}`);
+          }
+        } else {
+          setApiAvailable(false);
           setError('API OpenAI недоступен. Возможно, не настроен API-ключ или сервер перегружен. Пожалуйста, попробуйте позже.');
         }
       } catch (e) {
@@ -92,7 +116,7 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
   }, [prompt, theme, length]);
 
   // Используем ai/react для взаимодействия с чат-моделью
-  const { append, isLoading, messages, error: chatError } = useChat({
+  const { append, isLoading, error: chatError } = useChat({
     api: '/api/openai/chat',
     onFinish: (message) => {
       if (message.content.trim().length > 0) {
@@ -222,107 +246,4 @@ export default function FairyTaleGenerator({ onTaleGenerated, onGenerating }: Fa
           onClose={() => setError(null)}
           retryCount={retryCount}
           maxRetries={3}
-          errorType={error.includes('API') ? 'api' : 'generic'}
-          showClose={true}
-        />
-      )}
-      
-      <div className="mb-4">
-        <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 mb-1">
-          Тема сказки:
-        </label>
-        <select 
-          id="theme-select"
-          value={theme}
-          onChange={(e) => setTheme(e.target.value as ThemeType)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          aria-label="Выберите тему сказки"
-          disabled={isLoading}
-        >
-          {themeOptions.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-      
-      <div className="mb-4">
-        <label htmlFor="length-select" className="block text-sm font-medium text-gray-700 mb-1">
-          Длина сказки:
-        </label>
-        <select 
-          id="length-select"
-          value={length}
-          onChange={(e) => setLength(e.target.value as LengthType)}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          aria-label="Выберите длину сказки"
-          disabled={isLoading}
-        >
-          {lengthOptions.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-      
-      <div className="mb-6">
-        <label htmlFor="prompt-input" className="block text-sm font-medium text-gray-700 mb-1">
-          О чем сказка? (необязательно):
-        </label>
-        <input
-          id="prompt-input"
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Например: о драконе и принцессе"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          disabled={isLoading}
-        />
-        <p className="mt-1 text-sm text-gray-500">
-          Подсказка: чем больше деталей, тем интереснее будет сказка
-        </p>
-      </div>
-      
-      {/* Основная кнопка генерации */}
-      <button
-        onClick={handleGenerateTale}
-        disabled={isLoading || !apiAvailable}
-        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-md
-                  disabled:bg-purple-300 transition-colors flex items-center justify-center mb-4"
-      >
-        {isLoading ? (
-          <>
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Создание сказки...
-          </>
-        ) : (
-          'Создать сказку'
-        )}
-      </button>
-      
-      {/* Раздел для отладки */}
-      <div className="mt-4 border-t pt-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Диагностика</h3>
-        <div className="flex space-x-2">
-          <button
-            onClick={handleCheckAPI}
-            className="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded"
-          >
-            Проверить API
-          </button>
-          <div className="text-xs py-1">
-            Статус API: 
-            <span className={`ml-1 px-1 py-0.5 rounded ${apiAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {apiAvailable ? 'Доступен' : 'Недоступен'}
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="mt-4 text-center text-sm text-gray-500">
-        Создание сказки может занять до 15-20 секунд
-      </div>
-    </div>
-  );
-}
+          errorType={error
