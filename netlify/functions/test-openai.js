@@ -9,6 +9,7 @@ exports.handler = async function() {
       return {
         statusCode: 500,
         body: JSON.stringify({ 
+          success: false,
           error: 'OPENAI_API_KEY не найден в переменных окружения',
           envVars: Object.keys(process.env).filter(key => !key.includes('SECRET') && !key.includes('KEY') && !key.includes('TOKEN'))
         })
