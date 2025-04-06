@@ -24,6 +24,8 @@ const OPENAI_CONFIGS = {
 exports.handler = async function(event, context) {
   // Активируем режим отладки
   console.log('Запрос получен:', event.path);
+  console.log('Query параметры:', event.queryStringParameters);
+  console.log('HTTP метод:', event.httpMethod);
   
   // Ограничиваем время выполнения функции
   context.callbackWaitsForEmptyEventLoop = false;
@@ -54,10 +56,42 @@ exports.handler = async function(event, context) {
   });
   
   try {
-    // Определяем тип операции из пути
-    const pathParts = event.path.split('/');
-    const operation = pathParts[pathParts.length - 1];
-    console.log('Тип операции:', operation);
+    // Определяем тип операции из query параметров или из пути
+    let operation = '';
+    
+    // Первый способ: проверяем query параметр path, если он есть
+    if (event.queryStringParameters && event.queryStringParameters.path) {
+      operation = event.queryStringParameters.path;
+      console.log('Операция определена из query параметра:', operation);
+    } 
+    // Второй способ: проверяем из последней части пути
+    else {
+      const pathParts = event.path.split('/');
+      operation = pathParts[pathParts.length - 1];
+      console.log('Операция определена из пути:', operation);
+    }
+    
+    // Проверяем, соответствует ли операция известным типам
+    if (operation !== 'chat' && operation !== 'generate-image' && operation !== 'text-to-speech') {
+      // Проверяем, есть ли эти ключевые слова в пути
+      if (event.path.includes('/chat')) {
+        operation = 'chat';
+      } else if (event.path.includes('/generate-image')) {
+        operation = 'generate-image';
+      } else if (event.path.includes('/text-to-speech')) {
+        operation = 'text-to-speech';
+      } else {
+        return {
+          statusCode: 404,
+          body: JSON.stringify({ 
+            error: 'Unknown API endpoint', 
+            path: event.path,
+            operation: operation
+          })
+        };
+      }
+      console.log('Операция определена из пути (fallback):', operation);
+    }
     
     let requestBody;
     try {
@@ -74,13 +108,12 @@ exports.handler = async function(event, context) {
     // Обрабатываем разные типы запросов
     console.log('Начинаем обработку запроса типа:', operation);
     
-    // Используем switch с проверкой включения операции в путь
-    // для большей гибкости
-    if (event.path.includes('/chat')) {
+    // Используем операцию для выбора правильного обработчика
+    if (operation === 'chat') {
       return await handleChatRequest(openai, requestBody);
-    } else if (event.path.includes('/generate-image')) {
+    } else if (operation === 'generate-image') {
       return await handleImageRequest(openai, requestBody);
-    } else if (event.path.includes('/text-to-speech')) {
+    } else if (operation === 'text-to-speech') {
       return await handleTextToSpeechRequest(openai, requestBody);
     } else {
       return {
@@ -160,6 +193,7 @@ async function handleImageRequest(openai, requestBody) {
   
   try {
     console.log('Отправка запроса генерации изображения к OpenAI API...');
+    console.log('Промпт:', prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''));
     const startTime = Date.now();
     
     const config = OPENAI_CONFIGS.imageGeneration;
