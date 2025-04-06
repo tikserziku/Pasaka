@@ -545,9 +545,9 @@ export default function Home() {
                 )}
                 
                 {/* Исправление ошибки типизации здесь */}
-                {imagesStatus === 'idle' && (
+                {imagesStatus === 'idle' && (appState as AppState) !== 'generating-story' && (
                   <p className="text-gray-500">Изображения будут созданы после генерации сказки</p>
-                )}
+              )}
               </div>
               
               {/* Блок с аудио */}
